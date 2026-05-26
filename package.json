@@ -1,0 +1,15 @@
+{
+  "name": "atoz-meeting-room-booking",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "db:setup": "psql -U postgres -d meeting_room_booking -f database/postgres.sql"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}
