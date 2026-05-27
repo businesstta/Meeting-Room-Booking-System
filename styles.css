@@ -835,11 +835,27 @@ th {
   grid-template-columns: 48px 1fr;
   gap: 12px;
   align-items: start;
+  width: 100%;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--panel);
+  color: var(--ink);
   box-shadow: var(--shadow);
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-card:hover {
+  border-color: #60a5fa;
+}
+
+.notification-card.unread {
+  border-color: rgba(37, 99, 235, 0.45);
+}
+
+.notification-card.read {
+  opacity: 0.68;
 }
 
 .notification-card.reminder {
@@ -936,6 +952,33 @@ th {
 .calendar-toolbar > div:first-child {
   display: grid;
   gap: 6px;
+}
+
+.calendar-view-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--field);
+}
+
+.calendar-view-switch button {
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 12px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.calendar-view-switch button.active {
+  background: var(--soft);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .actions.no-margin {
@@ -1060,6 +1103,48 @@ th {
 .day-panel p {
   color: var(--muted);
   margin: -4px 0 14px;
+}
+
+.calendar-agenda.single {
+  padding: 14px;
+}
+
+.agenda-day-title {
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.workweek-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  min-height: 520px;
+}
+
+.workweek-day {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 14px;
+  border-right: 1px solid var(--line);
+  background: var(--field);
+  cursor: pointer;
+}
+
+.workweek-day.selected {
+  box-shadow: inset 0 0 0 3px #2563eb;
+}
+
+:root[data-theme="dark"] .workweek-day.selected {
+  box-shadow: inset 0 0 0 3px #93c5fd;
+}
+
+.workweek-events {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  color: var(--muted);
 }
 
 .day-timeline {
@@ -1444,6 +1529,17 @@ th {
   .calendar-weekdays,
   .calendar-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workweek-grid {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .workweek-day {
+    min-height: 160px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
 
   .calendar-cell {

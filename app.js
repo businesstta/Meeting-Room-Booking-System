@@ -99,9 +99,18 @@ const i18n = {
     notificationEmpty: "No notifications yet.",
     bookedSuccess: "Booking successful",
     monthView: "Month",
+    dayView: "Day",
+    workWeekView: "Work week",
     selectedDay: "Selected day",
     dayTimeline: "Day timeline",
-    clickDateHint: "Double click a date or time slot to create a booking."
+    clickDateHint: "Double click a date or time slot to create a booking.",
+    markAllRead: "Mark all as read",
+    unread: "Unread",
+    read: "Read",
+    notificationDetail: "Notification detail",
+    roomDisplayLogin: "Room display login",
+    roomDisplayLoginHelp: "Administrator login is required to open the tablet room display.",
+    adminOnly: "Administrator access is required."
   },
   my: {
     dashboard: "ဒက်ရှ်ဘုတ်",
@@ -201,9 +210,18 @@ const i18n = {
     notificationEmpty: "အသိပေးချက်မရှိသေးပါ။",
     bookedSuccess: "ဘိုကင်အောင်မြင်ပါသည်",
     monthView: "လမြင်ကွင်း",
+    dayView: "နေ့",
+    workWeekView: "အလုပ်ရက်သတ္တပတ်",
     selectedDay: "ရွေးထားသောနေ့",
     dayTimeline: "နေ့စဉ်အချိန်ဇယား",
-    clickDateHint: "နေ့ရက် သို့မဟုတ် အချိန် slot ကို double click နှိပ်ပြီး booking အသစ်လုပ်နိုင်သည်။"
+    clickDateHint: "နေ့ရက် သို့မဟုတ် အချိန် slot ကို double click နှိပ်ပြီး booking အသစ်လုပ်နိုင်သည်။",
+    markAllRead: "အားလုံးဖတ်ပြီးအဖြစ်မှတ်မည်",
+    unread: "မဖတ်ရသေး",
+    read: "ဖတ်ပြီး",
+    notificationDetail: "အသိပေးချက် အသေးစိတ်",
+    roomDisplayLogin: "Room display login",
+    roomDisplayLoginHelp: "Tablet room display ဝင်ရန် administrator account လိုအပ်သည်။",
+    adminOnly: "Administrator access လိုအပ်သည်။"
   }
 };
 
@@ -269,11 +287,14 @@ const state = {
   },
   calendarMonth: localDate().slice(0, 7),
   selectedDate: localDate(),
+  calendarView: localStorage.getItem("roombook-calendar-view") || "month",
   navOpen: false,
   navCollapsed: localStorage.getItem("roombook-nav-collapsed") === "true",
   notifications: JSON.parse(localStorage.getItem("roombook-notifications") || "[]"),
+  readNotificationIds: JSON.parse(localStorage.getItem("roombook-read-notifications") || "[]"),
   roomPanel: {
     active: false,
+    login: false,
     roomId: localStorage.getItem("roombook-display-room") || "",
     data: null
   },
@@ -337,7 +358,7 @@ async function loadData() {
 }
 
 async function loadRoomPanelData() {
-  const data = await apiFetch("/api/public/room-panel");
+  const data = state.data.rooms.length ? state.data : await apiFetch("/api/data");
   state.roomPanel.data = {
     ...data,
     bookings: data.bookings.sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
@@ -457,6 +478,11 @@ function render() {
     bindEvents();
     return;
   }
+  if (state.roomPanel.login && !state.currentUser) {
+    app.innerHTML = roomDisplayLoginScreen();
+    bindEvents();
+    return;
+  }
   if (!state.currentUser) {
     app.innerHTML = loginScreen();
     bindEvents();
@@ -466,7 +492,7 @@ function render() {
     state.view = "dashboard";
   }
   const initial = state.currentUser.name.slice(0, 1).toUpperCase();
-  const notificationCount = notifications().length;
+  const notificationCount = unreadNotifications().length;
   app.innerHTML = `
     <div class="shell ${state.navOpen ? "nav-open" : ""} ${state.navCollapsed ? "nav-collapsed" : ""}">
       <aside class="sidebar">
@@ -550,7 +576,7 @@ function loginScreen() {
           </div>
           <button class="btn full" type="submit">${t("login")}</button>
         </form>
-        <button class="btn secondary full" type="button" data-action="open-room-display">${icon("display")} ${t("roomDisplay")}</button>
+        <button class="btn secondary full" type="button" data-action="open-room-display-login">${icon("display")} ${t("roomDisplay")}</button>
       </section>
     </main>
     ${alertDialog()}
@@ -642,7 +668,7 @@ const views = {
         <div class="calendar-shell">
           <div class="calendar-toolbar">
             <div>
-              <span class="status">${t("monthView")}</span>
+              ${calendarViewControls()}
               <strong>${calendarMonthLabel()}</strong>
             </div>
             <div class="actions no-margin">
@@ -651,12 +677,7 @@ const views = {
               <button class="btn ghost" data-calendar="next">${t("next")}</button>
             </div>
           </div>
-          <div class="calendar-weekdays">
-            ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}
-          </div>
-          <div class="calendar-grid">
-            ${calendarCells()}
-          </div>
+          ${calendarMain()}
         </div>
         ${selectedDayPanel()}
       </section>
@@ -666,6 +687,13 @@ const views = {
     const items = notifications();
     return `
       <section class="notification-grid">
+        <div class="section-title notification-title">
+          <div>
+            <h2>${t("notifications")}</h2>
+            <p>${unreadNotifications().length} ${t("unread")}</p>
+          </div>
+          <button class="btn ghost" data-action="mark-all-read">${t("markAllRead")}</button>
+        </div>
         ${items.length ? items.map((item) => notificationCard(item)).join("") : `<div class="empty">${t("notificationEmpty")}</div>`}
       </section>
     `;
@@ -757,6 +785,77 @@ function calendarMonthLabel() {
   return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(new Date(`${state.calendarMonth}-01T00:00`));
 }
 
+function calendarViewControls() {
+  const views = [
+    ["day", t("dayView")],
+    ["workweek", t("workWeekView")],
+    ["month", t("monthView")]
+  ];
+  return `
+    <div class="calendar-view-switch">
+      ${views.map(([view, label]) => `<button class="${state.calendarView === view ? "active" : ""}" type="button" data-calendar-view="${view}">${label}</button>`).join("")}
+    </div>
+  `;
+}
+
+function calendarMain() {
+  if (state.calendarView === "day") return dayCalendarView();
+  if (state.calendarView === "workweek") return workWeekCalendarView();
+  return `
+    <div class="calendar-weekdays">
+      ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}
+    </div>
+    <div class="calendar-grid">
+      ${calendarCells()}
+    </div>
+  `;
+}
+
+function dayCalendarView() {
+  const bookings = state.data.bookings
+    .filter((booking) => booking.startTime.startsWith(state.selectedDate) && booking.status !== "cancelled")
+    .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+  return `
+    <div class="calendar-agenda single">
+      <div class="agenda-day-title">${formatDateLabel(state.selectedDate)}</div>
+      ${daySlots(state.selectedDate, bookings)}
+    </div>
+  `;
+}
+
+function workWeekCalendarView() {
+  const dates = workWeekDates(state.selectedDate);
+  return `
+    <div class="workweek-grid">
+      ${dates.map((dateKey) => {
+        const bookings = state.data.bookings
+          .filter((booking) => booking.startTime.startsWith(dateKey) && booking.status !== "cancelled")
+          .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+        return `
+          <section class="workweek-day ${dateKey === state.selectedDate ? "selected" : ""}" data-date="${dateKey}" role="button" tabindex="0">
+            <strong>${new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric" }).format(new Date(`${dateKey}T00:00`))}</strong>
+            <div class="workweek-events">
+              ${bookings.length ? bookings.map((booking) => calendarEventPill(booking)).join("") : `<span>${t("available")}</span>`}
+            </div>
+          </section>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function workWeekDates(dateKey) {
+  const date = new Date(`${dateKey}T00:00`);
+  const day = date.getDay();
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
+  return Array.from({ length: 5 }, (_, index) => {
+    const current = new Date(monday);
+    current.setDate(monday.getDate() + index);
+    return toDateKey(current);
+  });
+}
+
 function calendarCells() {
   const firstDay = new Date(`${state.calendarMonth}-01T00:00`);
   const gridStart = new Date(firstDay);
@@ -796,6 +895,35 @@ function calendarEventPill(booking) {
       <strong>${timeOnly(booking.startTime)} ${escapeHtml(booking.title)}</strong>
       <span>${escapeHtml(room?.name || "-")} - ${booking.status}</span>
     </button>
+  `;
+}
+
+function roomDisplayLoginScreen() {
+  applyPreferences();
+  return `
+    <main class="login-page">
+      <section class="login-panel">
+        ${brandMarkup("login-brand")}
+        <div class="login-copy">
+          <h1>${t("roomDisplayLogin")}</h1>
+          <p>${t("roomDisplayLoginHelp")}</p>
+        </div>
+        <form data-form="room-display-login" class="login-form">
+          <div class="field">
+            <label>${t("usernameEmail")}</label>
+            <input name="login" type="text" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label>${t("password")}</label>
+            <input name="password" type="password" autocomplete="current-password" required>
+          </div>
+          <button class="btn full" type="submit">${t("login")}</button>
+        </form>
+        <button class="btn ghost full" type="button" data-action="back-login">${t("backToLogin")}</button>
+      </section>
+    </main>
+    ${alertDialog()}
+    <div class="toast" id="toast"></div>
   `;
 }
 
@@ -870,6 +998,30 @@ function notifications() {
   return [...reminders, ...state.notifications].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+function unreadNotifications() {
+  return notifications().filter((item) => !isNotificationRead(item));
+}
+
+function isNotificationRead(item) {
+  return Boolean(item.readAt) || state.readNotificationIds.includes(String(item.id));
+}
+
+function persistNotificationState() {
+  localStorage.setItem("roombook-notifications", JSON.stringify(state.notifications));
+  localStorage.setItem("roombook-read-notifications", JSON.stringify(state.readNotificationIds));
+}
+
+function markNotificationRead(id) {
+  const idText = String(id);
+  state.notifications = state.notifications.map((item) => String(item.id) === idText ? { ...item, readAt: item.readAt || new Date().toISOString() } : item);
+  if (!state.readNotificationIds.includes(idText)) state.readNotificationIds.push(idText);
+  persistNotificationState();
+}
+
+function markAllNotificationsRead() {
+  notifications().forEach((item) => markNotificationRead(item.id));
+}
+
 function upcomingReminders() {
   const now = new Date();
   return visibleBookings(state.data.bookings)
@@ -889,24 +1041,25 @@ function upcomingReminders() {
 }
 
 function notificationCard(item) {
+  const read = isNotificationRead(item);
   return `
-    <article class="notification-card ${item.type || "info"}">
+    <button class="notification-card ${item.type || "info"} ${read ? "read" : "unread"}" type="button" data-notification="${escapeHtml(item.id)}">
       <div class="notification-icon">${icon(item.type === "reminder" ? "bell" : "bookings")}</div>
       <div>
         <strong>${escapeHtml(item.title)}</strong>
         <p>${escapeHtml(item.message)}</p>
-        <span>${fmtDateTime(item.createdAt)}</span>
+        <span>${fmtDateTime(item.createdAt)} · ${read ? t("read") : t("unread")}</span>
       </div>
-    </article>
+    </button>
   `;
 }
 
 function addNotification(item) {
   state.notifications = [
-    { id: Date.now(), createdAt: new Date().toISOString(), ...item },
+    { id: Date.now(), createdAt: new Date().toISOString(), readAt: null, ...item },
     ...state.notifications
   ].slice(0, 30);
-  localStorage.setItem("roombook-notifications", JSON.stringify(state.notifications));
+  persistNotificationState();
 }
 
 function formatDateLabel(dateKey) {
@@ -1110,6 +1263,7 @@ function modal() {
   const forms = {
     booking: bookingForm,
     "booking-detail": bookingDetail,
+    "notification-detail": notificationDetail,
     room: roomForm,
     user: userForm,
     "assign-user": assignUserForm,
@@ -1192,6 +1346,32 @@ function bookingDetail() {
           <button type="button" class="btn" data-edit-booking="${booking.id}">${t("edit")}</button>
           <button type="button" class="btn danger" data-cancel="${booking.id}">Cancel</button>
         ` : `<span class="status">View only</span>`}
+      </div>
+    </div>
+  `;
+}
+
+function notificationDetail() {
+  const item = notifications().find((notification) => String(notification.id) === String(state.modal?.id));
+  if (!item) return `<div class="empty">${t("notificationEmpty")}</div>`;
+  const read = isNotificationRead(item);
+  return `
+    <div class="booking-detail">
+      <div class="detail-accent"></div>
+      <div class="section-title">
+        <h2>${t("notificationDetail")}</h2>
+        <button type="button" class="btn ghost" data-action="close-modal">${t("close")}</button>
+      </div>
+      <div class="detail-row">
+        ${icon(item.type === "reminder" ? "bell" : "bookings")}
+        <div>
+          <strong>${escapeHtml(item.title)}</strong>
+          <span>${fmtDateTime(item.createdAt)} · ${read ? t("read") : t("unread")}</span>
+        </div>
+      </div>
+      <div class="alert-detail">${escapeHtml(item.message)}</div>
+      <div class="actions detail-actions">
+        <button type="button" class="btn" data-action="close-modal">OK</button>
       </div>
     </div>
   `;
@@ -1474,6 +1654,21 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-notification]").forEach((button) => {
+    button.addEventListener("click", () => {
+      markNotificationRead(button.dataset.notification);
+      state.modal = { type: "notification-detail", id: button.dataset.notification };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='mark-all-read']").forEach((button) => {
+    button.addEventListener("click", () => {
+      markAllNotificationsRead();
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-edit-booking]").forEach((button) => {
     button.addEventListener("click", () => {
       state.bookingDraft = null;
@@ -1482,22 +1677,28 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-action='open-room-display']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      try {
-        await loadRoomPanelData();
-        state.roomPanel.active = true;
-        render();
-      } catch (error) {
-        state.alert = { title: "Room display unavailable", message: "Please restart the server once to load the new room display endpoint.", tone: "danger" };
-        render();
-      }
+  document.querySelectorAll("[data-action='open-room-display-login']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.currentUser = null;
+      state.roomPanel.login = true;
+      state.roomPanel.active = false;
+      state.alert = null;
+      render();
     });
   });
 
   document.querySelectorAll("[data-action='back-login']").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
+      try {
+        await apiFetch("/api/logout", { method: "POST" });
+      } catch (error) {
+        // Returning to the login screen should still work if the session already expired.
+      }
+      localStorage.removeItem("roombook-current-user");
+      state.currentUser = null;
       state.roomPanel.active = false;
+      state.roomPanel.login = false;
+      state.roomPanel.data = null;
       render();
     });
   });
@@ -1519,7 +1720,12 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-action='logout']").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
+      try {
+        await apiFetch("/api/logout", { method: "POST" });
+      } catch (error) {
+        // Clear local state even if the server already ended the session.
+      }
       localStorage.removeItem("roombook-current-user");
       state.currentUser = null;
       state.navOpen = false;
@@ -1537,6 +1743,14 @@ function bindEvents() {
   document.querySelectorAll("[data-calendar]").forEach((button) => {
     button.addEventListener("click", () => {
       changeCalendarMonth(button.dataset.calendar);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-calendar-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.calendarView = button.dataset.calendarView;
+      localStorage.setItem("roombook-calendar-view", state.calendarView);
       render();
     });
   });
@@ -1605,6 +1819,36 @@ async function handleForm(event) {
     await loadData();
     render();
     return notify("Logged in successfully.");
+  }
+
+  if (type === "room-display-login") {
+    let user;
+    try {
+      ({ user } = await apiFetch("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ login: values.login, password: values.password })
+      }));
+    } catch (error) {
+      state.alert = { title: "Room display login failed", message: "Username or password is incorrect.", tone: "danger" };
+      return render();
+    }
+    if (!user.isActive || user.role !== "administrator") {
+      try {
+        await apiFetch("/api/logout", { method: "POST" });
+      } catch (error) {
+        // The next render clears local state even if the server session is already gone.
+      }
+      state.currentUser = null;
+      state.alert = { title: "Administrator required", message: t("adminOnly"), tone: "danger" };
+      return render();
+    }
+    state.currentUser = user;
+    await loadData();
+    await loadRoomPanelData();
+    state.roomPanel.login = false;
+    state.roomPanel.active = true;
+    render();
+    return notify("Room display opened.");
   }
 
   if (type === "booking") {
@@ -1775,7 +2019,15 @@ function showConflict(conflict) {
 
 function changeCalendarMonth(direction) {
   if (direction === "today") {
-    state.calendarMonth = localDate().slice(0, 7);
+    state.selectedDate = localDate();
+    state.calendarMonth = state.selectedDate.slice(0, 7);
+    return;
+  }
+  if (state.calendarView === "day" || state.calendarView === "workweek") {
+    const date = new Date(`${state.selectedDate}T00:00`);
+    date.setDate(date.getDate() + (direction === "next" ? 1 : -1) * (state.calendarView === "workweek" ? 7 : 1));
+    state.selectedDate = toDateKey(date);
+    state.calendarMonth = state.selectedDate.slice(0, 7);
     return;
   }
   const date = new Date(`${state.calendarMonth}-01T00:00`);
