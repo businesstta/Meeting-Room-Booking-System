@@ -5,6 +5,7 @@ const i18n = {
     dashboard: "Dashboard",
     bookings: "Bookings",
     calendar: "Calendar",
+    notifications: "Notifications",
     rooms: "Rooms",
     users: "Users",
     departments: "Departments",
@@ -17,6 +18,7 @@ const i18n = {
     dashboardSub: "Today bookings, pending approvals, and room availability.",
     bookingsSub: "Create requests and approve or cancel reservations.",
     calendarSub: "See booked meeting rooms by date and time.",
+    notificationsSub: "Meeting reminders and booking activity.",
     roomsSub: "Manage room capacity, floor, and equipment.",
     usersSub: "Create normal users by department and assign access roles.",
     departmentsSub: "Maintain the company department structure.",
@@ -77,12 +79,35 @@ const i18n = {
     light: "Light",
     dark: "Dark",
     language: "Language",
-    theme: "Theme"
+    theme: "Theme",
+    collapseNav: "Collapse navigation",
+    expandNav: "Expand navigation",
+    roomDisplay: "Room display",
+    backToLogin: "Back to login",
+    displaySub: "Live room tablet panel for today's meetings.",
+    selectRoom: "Select room",
+    now: "Now",
+    freeNow: "Free now",
+    busyNow: "Busy now",
+    todayBookings: "Today's bookings",
+    noMeetingsToday: "No meetings booked today.",
+    bookedBy: "Booked by",
+    roomPanel: "Room Panel",
+    upcomingReminder: "Upcoming reminder",
+    meetingStartsIn: "Meeting starts in",
+    minutes: "min",
+    notificationEmpty: "No notifications yet.",
+    bookedSuccess: "Booking successful",
+    monthView: "Month",
+    selectedDay: "Selected day",
+    dayTimeline: "Day timeline",
+    clickDateHint: "Select a date to review the day and create bookings."
   },
   my: {
     dashboard: "ဒက်ရှ်ဘုတ်",
     bookings: "ဘိုကင်များ",
     calendar: "ပြက္ခဒိန်",
+    notifications: "အသိပေးချက်များ",
     rooms: "အခန်းများ",
     users: "အသုံးပြုသူများ",
     departments: "ဌာနများ",
@@ -95,6 +120,7 @@ const i18n = {
     dashboardSub: "ယနေ့ဘိုကင်များ၊ စောင့်ဆိုင်းနေသောအတည်ပြုချက်များနှင့် အခန်းအသုံးပြုနိုင်မှု။",
     bookingsSub: "ဘိုကင်တောင်းဆိုမှုများ ပြုလုပ်ပြီး အတည်ပြု/ပယ်ဖျက်နိုင်သည်။",
     calendarSub: "နေ့ရက်နှင့်အချိန်အလိုက် booked meeting rooms များကိုကြည့်ရန်။",
+    notificationsSub: "အစည်းအဝေး reminder နှင့် booking activity များ။",
     roomsSub: "အခန်း capacity၊ အထပ်နှင့် equipment များစီမံရန်။",
     usersSub: "ဌာနအလိုက် အသုံးပြုသူများနှင့် role များစီမံရန်။",
     departmentsSub: "ကုမ္ပဏီဌာနဖွဲ့စည်းပုံကို စီမံရန်။",
@@ -155,7 +181,29 @@ const i18n = {
     light: "Light",
     dark: "Dark",
     language: "ဘာသာစကား",
-    theme: "အရောင်စနစ်"
+    theme: "အရောင်စနစ်",
+    collapseNav: "Navigation ခေါက်မည်",
+    expandNav: "Navigation ဖြန့်မည်",
+    roomDisplay: "Room display",
+    backToLogin: "Login သို့ပြန်သွားမည်",
+    displaySub: "ယနေ့အစည်းအဝေးများအတွက် room tablet panel။",
+    selectRoom: "အခန်းရွေးမည်",
+    now: "ယခု",
+    freeNow: "ယခု အားလပ်သည်",
+    busyNow: "ယခု မအားပါ",
+    todayBookings: "ယနေ့ဘိုကင်များ",
+    noMeetingsToday: "ယနေ့အတွက် ဘိုကင်မရှိပါ။",
+    bookedBy: "ဘိုကင်လုပ်သူ",
+    roomPanel: "Room Panel",
+    upcomingReminder: "Reminder",
+    meetingStartsIn: "အစည်းအဝေးစရန်",
+    minutes: "မိနစ်",
+    notificationEmpty: "အသိပေးချက်မရှိသေးပါ။",
+    bookedSuccess: "ဘိုကင်အောင်မြင်ပါသည်",
+    monthView: "လမြင်ကွင်း",
+    selectedDay: "ရွေးထားသောနေ့",
+    dayTimeline: "နေ့စဉ်အချိန်ဇယား",
+    clickDateHint: "နေ့ရက်ရွေးပြီး schedule ကြည့်နိုင်သလို booking အသစ်လည်းလုပ်နိုင်သည်။"
   }
 };
 
@@ -220,22 +268,47 @@ const state = {
     status: "all"
   },
   calendarMonth: localDate().slice(0, 7),
+  selectedDate: localDate(),
   navOpen: false,
+  navCollapsed: localStorage.getItem("roombook-nav-collapsed") === "true",
+  notifications: JSON.parse(localStorage.getItem("roombook-notifications") || "[]"),
+  roomPanel: {
+    active: false,
+    roomId: localStorage.getItem("roombook-display-room") || "",
+    data: null
+  },
   language: localStorage.getItem("roombook-language") || "en",
   theme: localStorage.getItem("roombook-theme") || "light"
 };
 
 const navItems = [
-  { id: "dashboard", labelKey: "dashboard", icon: "D" },
-  { id: "bookings", labelKey: "bookings", icon: "B" },
-  { id: "calendar", labelKey: "calendar", icon: "C" },
-  { id: "rooms", labelKey: "rooms", icon: "R", managerOnly: true },
-  { id: "users", labelKey: "users", icon: "U", managerOnly: true },
-  { id: "departments", labelKey: "departments", icon: "P", managerOnly: true }
+  { id: "dashboard", labelKey: "dashboard", icon: "dashboard" },
+  { id: "bookings", labelKey: "bookings", icon: "bookings" },
+  { id: "calendar", labelKey: "calendar", icon: "calendar" },
+  { id: "notifications", labelKey: "notifications", icon: "bell" },
+  { id: "rooms", labelKey: "rooms", icon: "rooms", managerOnly: true },
+  { id: "users", labelKey: "users", icon: "users", managerOnly: true },
+  { id: "departments", labelKey: "departments", icon: "departments", managerOnly: true }
 ];
 
 function t(key) {
   return i18n[state.language]?.[key] || i18n.en[key] || key;
+}
+
+function icon(name) {
+  const paths = {
+    dashboard: `<path d="M4 13h7V4H4v9Zm9 7h7V4h-7v16ZM4 20h7v-5H4v5Z"/>`,
+    bookings: `<path d="M7 3v3M17 3v3M4 8h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="m8 13 2 2 5-5"/>`,
+    calendar: `<path d="M7 3v3M17 3v3M4 8h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/><path d="M8 12h3M8 16h8"/>`,
+    bell: `<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/>`,
+    rooms: `<path d="M4 21V5a2 2 0 0 1 2-2h9v18"/><path d="M15 8h3a2 2 0 0 1 2 2v11M11 12h.01"/>`,
+    users: `<path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
+    departments: `<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01"/>`,
+    collapse: `<path d="M15 18 9 12l6-6"/><path d="M20 4v16M4 4v16"/>`,
+    expand: `<path d="m9 18 6-6-6-6"/><path d="M4 4v16M20 4v16"/>`,
+    display: `<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>`
+  };
+  return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.dashboard}</svg>`;
 }
 
 function applyPreferences() {
@@ -261,6 +334,18 @@ async function loadData() {
     rooms,
     bookings: bookings.sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
   };
+}
+
+async function loadRoomPanelData() {
+  const data = await apiFetch("/api/public/room-panel");
+  state.roomPanel.data = {
+    ...data,
+    bookings: data.bookings.sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
+  };
+  if (!state.roomPanel.roomId && data.rooms[0]) {
+    state.roomPanel.roomId = String(data.rooms[0].id);
+    localStorage.setItem("roombook-display-room", state.roomPanel.roomId);
+  }
 }
 
 async function apiFetch(path, options = {}) {
@@ -367,6 +452,11 @@ function brandMarkup(className = "") {
 function render() {
   applyPreferences();
   const app = document.querySelector("#app");
+  if (state.roomPanel.active) {
+    app.innerHTML = roomDisplayScreen();
+    bindEvents();
+    return;
+  }
   if (!state.currentUser) {
     app.innerHTML = loginScreen();
     bindEvents();
@@ -376,14 +466,19 @@ function render() {
     state.view = "dashboard";
   }
   const initial = state.currentUser.name.slice(0, 1).toUpperCase();
+  const notificationCount = notifications().length;
   app.innerHTML = `
-    <div class="shell ${state.navOpen ? "nav-open" : ""}">
+    <div class="shell ${state.navOpen ? "nav-open" : ""} ${state.navCollapsed ? "nav-collapsed" : ""}">
       <aside class="sidebar">
         ${brandMarkup()}
+        <button class="nav-collapse" data-action="collapse-nav" title="${state.navCollapsed ? t("expandNav") : t("collapseNav")}">
+          ${icon(state.navCollapsed ? "expand" : "collapse")}
+          <span>${state.navCollapsed ? t("expandNav") : t("collapseNav")}</span>
+        </button>
         <nav class="nav">
           ${visibleNavItems().map((item) => `
             <button class="${state.view === item.id ? "active" : ""}" data-view="${item.id}" title="${t(item.labelKey)}">
-              <span>${item.icon}</span>
+              <span class="nav-icon">${icon(item.icon)}${item.id === "notifications" && notificationCount ? `<em>${notificationCount}</em>` : ""}</span>
               <strong>${t(item.labelKey)}</strong>
             </button>
           `).join("")}
@@ -455,6 +550,7 @@ function loginScreen() {
           </div>
           <button class="btn full" type="submit">${t("login")}</button>
         </form>
+        <button class="btn secondary full" type="button" data-action="open-room-display">${icon("display")} ${t("roomDisplay")}</button>
       </section>
     </main>
     ${alertDialog()}
@@ -467,6 +563,7 @@ function topbar() {
     dashboard: [t("dashboard"), t("dashboardSub")],
     bookings: [t("bookings"), t("bookingsSub")],
     calendar: [t("calendar"), t("calendarSub")],
+    notifications: [t("notifications"), t("notificationsSub")],
     rooms: [t("rooms"), t("roomsSub")],
     users: [t("users"), t("usersSub")],
     departments: [t("departments"), t("departmentsSub")]
@@ -476,6 +573,7 @@ function topbar() {
     dashboard: `<button class="btn" data-modal="booking">${t("newBooking")}</button>`,
     bookings: `<button class="btn" data-modal="booking">${t("newBooking")}</button>`,
     calendar: `<button class="btn" data-modal="booking">${t("newBooking")}</button>`,
+    notifications: `<button class="btn" data-modal="booking">${t("newBooking")}</button>`,
     rooms: `<button class="btn" data-modal="room">${t("newRoom")}</button>`,
     users: `<button class="btn" data-modal="user">${t("newUser")}</button>`,
     departments: `<button class="btn" data-modal="department">${t("newDepartment")}</button>`
@@ -540,21 +638,35 @@ const views = {
   },
   calendar() {
     return `
-      <section class="calendar-shell">
-        <div class="calendar-toolbar">
-          <div class="actions no-margin">
-            <button class="btn ghost" data-calendar="prev">${t("previous")}</button>
-            <button class="btn ghost" data-calendar="today">${t("today")}</button>
-            <button class="btn ghost" data-calendar="next">${t("next")}</button>
+      <section class="calendar-layout">
+        <div class="calendar-shell">
+          <div class="calendar-toolbar">
+            <div>
+              <span class="status">${t("monthView")}</span>
+              <strong>${calendarMonthLabel()}</strong>
+            </div>
+            <div class="actions no-margin">
+              <button class="btn ghost" data-calendar="prev">${t("previous")}</button>
+              <button class="btn ghost" data-calendar="today">${t("today")}</button>
+              <button class="btn ghost" data-calendar="next">${t("next")}</button>
+            </div>
           </div>
-          <strong>${calendarMonthLabel()}</strong>
+          <div class="calendar-weekdays">
+            ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}
+          </div>
+          <div class="calendar-grid">
+            ${calendarCells()}
+          </div>
         </div>
-        <div class="calendar-weekdays">
-          ${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}
-        </div>
-        <div class="calendar-grid">
-          ${calendarCells()}
-        </div>
+        ${selectedDayPanel()}
+      </section>
+    `;
+  },
+  notifications() {
+    const items = notifications();
+    return `
+      <section class="notification-grid">
+        ${items.length ? items.map((item) => notificationCard(item)).join("") : `<div class="empty">${t("notificationEmpty")}</div>`}
       </section>
     `;
   },
@@ -661,9 +773,10 @@ function calendarCells() {
       .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
     const isOtherMonth = !dateKey.startsWith(month);
     const isToday = dateKey === today;
+    const isSelected = dateKey === state.selectedDate;
 
     return `
-      <article class="calendar-cell ${isOtherMonth ? "muted" : ""} ${isToday ? "today" : ""}">
+      <button class="calendar-cell ${isOtherMonth ? "muted" : ""} ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}" data-date="${dateKey}" type="button">
         <div class="calendar-cell-head">
           <strong>${date.getDate()}</strong>
           ${isToday ? `<span class="status approved">today</span>` : ""}
@@ -671,7 +784,7 @@ function calendarCells() {
         <div class="calendar-cell-events">
           ${bookings.map((booking) => calendarEventPill(booking)).join("")}
         </div>
-      </article>
+      </button>
     `;
   }).join("");
 }
@@ -684,6 +797,96 @@ function calendarEventPill(booking) {
       <span>${escapeHtml(room?.name || "-")} - ${booking.status}</span>
     </div>
   `;
+}
+
+function selectedDayPanel() {
+  const bookings = visibleBookings(state.data.bookings)
+    .filter((booking) => booking.startTime.startsWith(state.selectedDate) && booking.status !== "cancelled")
+    .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+  return `
+    <aside class="day-panel">
+      <div class="section-title">
+        <div>
+          <span class="status">${t("selectedDay")}</span>
+          <h2>${formatDateLabel(state.selectedDate)}</h2>
+        </div>
+        <button class="btn" data-action="book-selected-date">${t("newBooking")}</button>
+      </div>
+      <p>${t("clickDateHint")}</p>
+      <div class="day-timeline">
+        ${daySlots(state.selectedDate, bookings)}
+      </div>
+    </aside>
+  `;
+}
+
+function daySlots(dateKey, bookings) {
+  return Array.from({ length: 11 }, (_, index) => {
+    const hour = index + 8;
+    const slotStart = new Date(`${dateKey}T${String(hour).padStart(2, "0")}:00`);
+    const slotEnd = new Date(slotStart);
+    slotEnd.setHours(slotStart.getHours() + 1);
+    const slotBookings = bookings.filter((booking) => new Date(booking.startTime) < slotEnd && new Date(booking.endTime) > slotStart);
+    return `
+      <div class="day-slot ${slotBookings.length ? "busy" : "free"}">
+        <strong>${String(hour).padStart(2, "0")}:00</strong>
+        <div>
+          ${slotBookings.length ? slotBookings.map((booking) => {
+            const room = byId(state.data.rooms, booking.roomId);
+            return `<span>${timeOnly(booking.startTime)} - ${timeOnly(booking.endTime)} · ${escapeHtml(booking.title)} · ${escapeHtml(room?.name || "-")}</span>`;
+          }).join("") : `<span>${t("available")}</span>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function notifications() {
+  const reminders = upcomingReminders();
+  return [...reminders, ...state.notifications].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function upcomingReminders() {
+  const now = new Date();
+  return visibleBookings(state.data.bookings)
+    .filter((booking) => booking.status === "approved")
+    .map((booking) => ({ booking, minutesLeft: Math.round((new Date(booking.startTime) - now) / 60000) }))
+    .filter((item) => item.minutesLeft >= 0 && item.minutesLeft <= 15)
+    .map(({ booking, minutesLeft }) => {
+      const room = byId(state.data.rooms, booking.roomId);
+      return {
+        id: `reminder-${booking.id}`,
+        type: "reminder",
+        title: t("upcomingReminder"),
+        message: `${booking.title} · ${room?.name || "-"} · ${t("meetingStartsIn")} ${minutesLeft} ${t("minutes")}`,
+        createdAt: booking.startTime
+      };
+    });
+}
+
+function notificationCard(item) {
+  return `
+    <article class="notification-card ${item.type || "info"}">
+      <div class="notification-icon">${icon(item.type === "reminder" ? "bell" : "bookings")}</div>
+      <div>
+        <strong>${escapeHtml(item.title)}</strong>
+        <p>${escapeHtml(item.message)}</p>
+        <span>${fmtDateTime(item.createdAt)}</span>
+      </div>
+    </article>
+  `;
+}
+
+function addNotification(item) {
+  state.notifications = [
+    { id: Date.now(), createdAt: new Date().toISOString(), ...item },
+    ...state.notifications
+  ].slice(0, 30);
+  localStorage.setItem("roombook-notifications", JSON.stringify(state.notifications));
+}
+
+function formatDateLabel(dateKey) {
+  return new Intl.DateTimeFormat("en", { weekday: "long", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${dateKey}T00:00`));
 }
 
 function toDateKey(date) {
@@ -731,6 +934,86 @@ function roomCard(room, editable = false) {
       </div>
     </article>
   `;
+}
+
+function roomDisplayScreen() {
+  const data = state.roomPanel.data || { rooms: [], bookings: [], users: [], departments: [] };
+  const roomId = state.roomPanel.roomId || data.rooms[0]?.id || "";
+  const room = data.rooms.find((item) => Number(item.id) === Number(roomId)) || data.rooms[0];
+  const bookings = data.bookings
+    .filter((booking) => Number(booking.roomId) === Number(room?.id))
+    .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+  const active = currentRoomBooking(bookings);
+  return `
+    <main class="display-page">
+      <section class="display-shell">
+        <div class="display-header">
+          ${brandMarkup()}
+          <button class="btn ghost" data-action="back-login">${t("backToLogin")}</button>
+        </div>
+        <div class="display-toolbar">
+          <div>
+            <span class="status">${t("roomPanel")}</span>
+            <h1>${escapeHtml(room?.name || t("roomDisplay"))}</h1>
+            <p>${escapeHtml(room?.floor || "")} · ${formatDateLabel(localDate())}</p>
+          </div>
+          <div class="field">
+            <label>${t("selectRoom")}</label>
+            <select data-display-room>${data.rooms.map((item) => `<option value="${item.id}"${Number(item.id) === Number(room?.id) ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select>
+          </div>
+        </div>
+        <div class="display-status ${active ? "busy" : "free"}">
+          <span>${t("now")}</span>
+          <strong>${active ? t("busyNow") : t("freeNow")}</strong>
+          <p>${active ? `${timeOnly(active.startTime)} - ${timeOnly(active.endTime)} · ${escapeHtml(active.title)}` : t("noMeetingsToday")}</p>
+        </div>
+        <div class="display-grid">
+          <section class="card">
+            <div class="section-title"><h2>${t("todayBookings")}</h2></div>
+            ${bookings.length ? bookings.map((booking) => roomPanelBooking(booking, data)).join("") : `<div class="empty">${t("noMeetingsToday")}</div>`}
+          </section>
+          <section class="card">
+            <div class="section-title"><h2>${t("dayTimeline")}</h2></div>
+            <div class="display-timeline">${roomPanelTimeline(bookings)}</div>
+          </section>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
+function currentRoomBooking(bookings) {
+  const now = new Date();
+  return bookings.find((booking) => new Date(booking.startTime) <= now && new Date(booking.endTime) > now);
+}
+
+function roomPanelBooking(booking, data) {
+  const requester = data.users.find((user) => Number(user.id) === Number(booking.requesterId));
+  const department = data.departments.find((item) => Number(item.id) === Number(booking.departmentId));
+  return `
+    <div class="display-booking">
+      <strong>${timeOnly(booking.startTime)} - ${timeOnly(booking.endTime)}</strong>
+      <span>${escapeHtml(booking.title)}</span>
+      <small>${t("bookedBy")} ${escapeHtml(requester?.name || "-")} · ${escapeHtml(department?.name || "-")}</small>
+    </div>
+  `;
+}
+
+function roomPanelTimeline(bookings) {
+  return Array.from({ length: 11 }, (_, index) => {
+    const hour = index + 8;
+    const dateKey = localDate();
+    const slotStart = new Date(`${dateKey}T${String(hour).padStart(2, "0")}:00`);
+    const slotEnd = new Date(slotStart);
+    slotEnd.setHours(slotStart.getHours() + 1);
+    const busy = bookings.find((booking) => new Date(booking.startTime) < slotEnd && new Date(booking.endTime) > slotStart);
+    return `
+      <div class="display-slot ${busy ? "busy" : "free"}">
+        <strong>${String(hour).padStart(2, "0")}:00</strong>
+        <span>${busy ? `${timeOnly(busy.startTime)} - ${timeOnly(busy.endTime)} · ${escapeHtml(busy.title)}` : t("available")}</span>
+      </div>
+    `;
+  }).join("");
 }
 
 function filters() {
@@ -1076,6 +1359,61 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='collapse-nav']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.navCollapsed = !state.navCollapsed;
+      localStorage.setItem("roombook-nav-collapsed", String(state.navCollapsed));
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-date]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedDate = button.dataset.date;
+      state.calendarMonth = state.selectedDate.slice(0, 7);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='book-selected-date']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.bookingDraft = {
+        startTime: `${state.selectedDate}T09:00`,
+        endTime: `${state.selectedDate}T10:00`
+      };
+      state.modal = { type: "booking" };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='open-room-display']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await loadRoomPanelData();
+        state.roomPanel.active = true;
+        render();
+      } catch (error) {
+        state.alert = { title: "Room display unavailable", message: "Please restart the server once to load the new room display endpoint.", tone: "danger" };
+        render();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-action='back-login']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.roomPanel.active = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-display-room]").forEach((select) => {
+    select.addEventListener("change", () => {
+      state.roomPanel.roomId = select.value;
+      localStorage.setItem("roombook-display-room", select.value);
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-pref]").forEach((button) => {
     button.addEventListener("click", () => {
       state[button.dataset.pref] = button.dataset.value;
@@ -1185,8 +1523,9 @@ async function handleForm(event) {
     if (conflict) {
       return showConflict(conflict);
     }
+    let savedBooking;
     try {
-      await put("bookings", {
+      savedBooking = await put("bookings", {
         title: values.title,
         roomId: Number(values.roomId),
         requesterId: Number(values.requesterId),
@@ -1207,7 +1546,15 @@ async function handleForm(event) {
     }
     state.filters.date = values.startTime.slice(0, 10);
     state.calendarMonth = values.startTime.slice(0, 7);
+    state.selectedDate = values.startTime.slice(0, 10);
     state.bookingDraft = null;
+    const room = byId(state.data.rooms, Number(values.roomId));
+    addNotification({
+      type: "success",
+      title: t("bookedSuccess"),
+      message: `${savedBooking.title} · ${room?.name || "-"} · ${fmtDateTime(savedBooking.startTime)}`,
+      createdAt: new Date().toISOString()
+    });
   }
 
   if (type === "room") {

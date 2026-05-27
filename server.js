@@ -254,6 +254,22 @@ app.get("/api/me", asyncRoute(async (req, res) => {
   res.json({ user: result.rows[0] ? userRow(result.rows[0]) : null });
 }));
 
+app.get("/api/public/room-panel", asyncRoute(async (_req, res) => {
+  const [rooms, bookings, users, departments] = await Promise.all([
+    pool.query("SELECT * FROM rooms WHERE is_active = true ORDER BY name"),
+    pool.query("SELECT * FROM bookings WHERE status <> 'cancelled' AND start_time::date = CURRENT_DATE ORDER BY start_time, id"),
+    pool.query("SELECT id, name, email, role, department_id, is_active, created_at FROM users ORDER BY id"),
+    pool.query("SELECT * FROM departments ORDER BY id")
+  ]);
+  res.json({
+    rooms: rooms.rows.map(roomRow),
+    bookings: bookings.rows.map(bookingRow),
+    users: users.rows.map((row) => userRow({ ...row, username: "" })),
+    departments: departments.rows.map(departmentRow),
+    generatedAt: toIsoMinute(new Date())
+  });
+}));
+
 app.post("/api/login", asyncRoute(async (req, res) => {
   const login = String(req.body.login || "").trim().toLowerCase();
   const password = String(req.body.password || "");
