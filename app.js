@@ -101,7 +101,7 @@ const i18n = {
     monthView: "Month",
     selectedDay: "Selected day",
     dayTimeline: "Day timeline",
-    clickDateHint: "Select a date to review the day and create bookings."
+    clickDateHint: "Double click a date or time slot to create a booking."
   },
   my: {
     dashboard: "ဒက်ရှ်ဘုတ်",
@@ -203,7 +203,7 @@ const i18n = {
     monthView: "လမြင်ကွင်း",
     selectedDay: "ရွေးထားသောနေ့",
     dayTimeline: "နေ့စဉ်အချိန်ဇယား",
-    clickDateHint: "နေ့ရက်ရွေးပြီး schedule ကြည့်နိုင်သလို booking အသစ်လည်းလုပ်နိုင်သည်။"
+    clickDateHint: "နေ့ရက် သို့မဟုတ် အချိန် slot ကို double click နှိပ်ပြီး booking အသစ်လုပ်နိုင်သည်။"
   }
 };
 
@@ -776,7 +776,7 @@ function calendarCells() {
     const isSelected = dateKey === state.selectedDate;
 
     return `
-      <button class="calendar-cell ${isOtherMonth ? "muted" : ""} ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}" data-date="${dateKey}" type="button">
+      <article class="calendar-cell ${isOtherMonth ? "muted" : ""} ${isToday ? "today" : ""} ${isSelected ? "selected" : ""}" data-date="${dateKey}" role="button" tabindex="0" title="Double click to book">
         <div class="calendar-cell-head">
           <strong>${date.getDate()}</strong>
           ${isToday ? `<span class="status approved">today</span>` : ""}
@@ -784,7 +784,7 @@ function calendarCells() {
         <div class="calendar-cell-events">
           ${bookings.map((booking) => calendarEventPill(booking)).join("")}
         </div>
-      </button>
+      </article>
     `;
   }).join("");
 }
@@ -792,15 +792,15 @@ function calendarCells() {
 function calendarEventPill(booking) {
   const room = byId(state.data.rooms, booking.roomId);
   return `
-    <div class="calendar-pill ${booking.status}">
+    <button class="calendar-pill ${booking.status}" type="button" data-booking-detail="${booking.id}" title="${escapeHtml(booking.title)}">
       <strong>${timeOnly(booking.startTime)} ${escapeHtml(booking.title)}</strong>
       <span>${escapeHtml(room?.name || "-")} - ${booking.status}</span>
-    </div>
+    </button>
   `;
 }
 
 function selectedDayPanel() {
-  const bookings = visibleBookings(state.data.bookings)
+  const bookings = state.data.bookings
     .filter((booking) => booking.startTime.startsWith(state.selectedDate) && booking.status !== "cancelled")
     .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
   return `
@@ -810,7 +810,6 @@ function selectedDayPanel() {
           <span class="status">${t("selectedDay")}</span>
           <h2>${formatDateLabel(state.selectedDate)}</h2>
         </div>
-        <button class="btn" data-action="book-selected-date">${t("newBooking")}</button>
       </div>
       <p>${t("clickDateHint")}</p>
       <div class="day-timeline">
@@ -821,24 +820,49 @@ function selectedDayPanel() {
 }
 
 function daySlots(dateKey, bookings) {
-  return Array.from({ length: 11 }, (_, index) => {
-    const hour = index + 8;
-    const slotStart = new Date(`${dateKey}T${String(hour).padStart(2, "0")}:00`);
+  return Array.from({ length: 21 }, (_, index) => {
+    const minutes = (8 * 60) + (index * 30);
+    const hour = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    const timeText = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    const slotStart = new Date(`${dateKey}T${timeText}`);
     const slotEnd = new Date(slotStart);
-    slotEnd.setHours(slotStart.getHours() + 1);
+    slotEnd.setMinutes(slotStart.getMinutes() + 30);
     const slotBookings = bookings.filter((booking) => new Date(booking.startTime) < slotEnd && new Date(booking.endTime) > slotStart);
     return `
-      <div class="day-slot ${slotBookings.length ? "busy" : "free"}">
-        <strong>${String(hour).padStart(2, "0")}:00</strong>
+      <div class="day-slot ${slotBookings.length ? "busy" : "free"}" data-slot-start="${dateKey}T${timeText}" title="Double click to book this time">
+        <strong>${timeText}</strong>
         <div>
           ${slotBookings.length ? slotBookings.map((booking) => {
             const room = byId(state.data.rooms, booking.roomId);
-            return `<span>${timeOnly(booking.startTime)} - ${timeOnly(booking.endTime)} · ${escapeHtml(booking.title)} · ${escapeHtml(room?.name || "-")}</span>`;
+            return `<button class="day-slot-booking" type="button" data-booking-detail="${booking.id}">${timeOnly(booking.startTime)} - ${timeOnly(booking.endTime)} · ${escapeHtml(booking.title)} · ${escapeHtml(room?.name || "-")}</button>`;
           }).join("") : `<span>${t("available")}</span>`}
         </div>
       </div>
     `;
   }).join("");
+}
+
+function openBookingDraft(startTime) {
+  const start = new Date(startTime);
+  const end = new Date(start);
+  end.setMinutes(start.getMinutes() + 30);
+  state.selectedDate = startTime.slice(0, 10);
+  state.calendarMonth = state.selectedDate.slice(0, 7);
+  state.bookingDraft = {
+    startTime,
+    endTime: toLocalInputValue(end),
+    roomId: state.filters.roomId !== "all" ? state.filters.roomId : (state.data.rooms[0]?.id || ""),
+    title: "New meeting",
+    attendees: "6"
+  };
+  state.modal = { type: "booking" };
+  render();
+}
+
+function toLocalInputValue(date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function notifications() {
@@ -1085,6 +1109,7 @@ function modal() {
   if (!state.modal) return `<div class="modal"></div>`;
   const forms = {
     booking: bookingForm,
+    "booking-detail": bookingDetail,
     room: roomForm,
     user: userForm,
     "assign-user": assignUserForm,
@@ -1122,49 +1147,101 @@ function alertDialog() {
   `;
 }
 
+function canEditBooking(booking) {
+  return canManage() || Number(booking?.requesterId) === Number(state.currentUser?.id);
+}
+
+function bookingDetail() {
+  const booking = modalItem("bookings");
+  if (!booking) return `<div class="empty">${t("noBookings")}</div>`;
+  const room = byId(state.data.rooms, booking.roomId);
+  const department = byId(state.data.departments, booking.departmentId);
+  const requester = byId(state.data.users, booking.requesterId);
+  const editable = canEditBooking(booking) && booking.status !== "cancelled";
+  return `
+    <div class="booking-detail">
+      <div class="detail-accent"></div>
+      <div class="section-title">
+        <h2>${escapeHtml(booking.title)}</h2>
+        <button type="button" class="btn ghost" data-action="close-modal">${t("close")}</button>
+      </div>
+      <div class="detail-row">
+        ${icon("calendar")}
+        <div>
+          <strong>${fmtDateTime(booking.startTime)} - ${fmtDateTime(booking.endTime)}</strong>
+          <span>${bookingHours(booking)} · <span class="status ${booking.status}">${booking.status}</span></span>
+        </div>
+      </div>
+      <div class="detail-row">
+        ${icon("rooms")}
+        <div>
+          <strong>${escapeHtml(room?.name || "-")}</strong>
+          <span>${escapeHtml(room?.floor || "")}</span>
+        </div>
+      </div>
+      <div class="detail-row">
+        ${icon("users")}
+        <div>
+          <strong>${escapeHtml(requester?.name || "-")}</strong>
+          <span>${escapeHtml(department?.name || "-")} · ${booking.attendees} ${t("people")}</span>
+        </div>
+      </div>
+      ${booking.purpose ? `<div class="alert-detail">${escapeHtml(booking.purpose)}</div>` : ""}
+      <div class="actions detail-actions">
+        ${editable ? `
+          <button type="button" class="btn" data-edit-booking="${booking.id}">${t("edit")}</button>
+          <button type="button" class="btn danger" data-cancel="${booking.id}">Cancel</button>
+        ` : `<span class="status">View only</span>`}
+      </div>
+    </div>
+  `;
+}
+
 function bookingForm() {
   const normalUser = !canManage();
-  const requesterId = normalUser ? state.currentUser.id : 2;
-  const departmentId = normalUser ? state.currentUser.departmentId : "";
+  const booking = modalItem("bookings");
+  const requesterId = normalUser ? state.currentUser.id : (booking?.requesterId || 2);
+  const departmentId = normalUser ? state.currentUser.departmentId : (booking?.departmentId || "");
   const draft = state.bookingDraft || {};
+  const data = { ...booking, ...draft };
   return `
     <form data-form="booking">
       <div class="section-title">
-        <h2>${t("newBooking")}</h2>
+        <h2>${booking ? "Edit booking" : t("newBooking")}</h2>
         <button type="button" class="btn ghost" data-action="close-modal">${t("close")}</button>
       </div>
       <div class="form-grid">
-        ${input(t("title"), "title", "text", draft.title || "Project planning")}
+        ${input(t("title"), "title", "text", data.title || "Project planning")}
         <div class="field">
           <label>${t("room")}</label>
-          <select name="roomId" required>${optionList(state.data.rooms, draft.roomId || "")}</select>
+          <select name="roomId" required>${optionList(state.data.rooms, data.roomId || "")}</select>
         </div>
         <div class="field">
           <label>${t("requester")}</label>
           ${normalUser
             ? `<input type="hidden" name="requesterId" value="${state.currentUser.id}"><input value="${escapeHtml(state.currentUser.name)}" disabled>`
-            : `<select name="requesterId" required>${optionList(state.data.users, draft.requesterId || requesterId)}</select>`}
+            : `<select name="requesterId" required>${optionList(state.data.users, data.requesterId || requesterId)}</select>`}
         </div>
         <div class="field">
           <label>${t("department")}</label>
           ${normalUser
             ? `<input type="hidden" name="departmentId" value="${state.currentUser.departmentId}"><input value="${escapeHtml(byId(state.data.departments, state.currentUser.departmentId)?.name || "-")}" disabled>`
-            : `<select name="departmentId" required>${optionList(state.data.departments, draft.departmentId || departmentId)}</select>`}
+            : `<select name="departmentId" required>${optionList(state.data.departments, data.departmentId || departmentId)}</select>`}
         </div>
-        ${timeInput(t("startTime"), "startTime", draft.startTime || localDateAt("11:00"))}
-        ${timeInput(t("endTime"), "endTime", draft.endTime || localDateAt("12:00"))}
+        ${timeInput(t("startTime"), "startTime", data.startTime || localDateAt("11:00"))}
+        ${timeInput(t("endTime"), "endTime", data.endTime || localDateAt("12:00"))}
         <div class="field">
           <label>${t("availability")}</label>
           <button class="btn secondary" type="button" data-action="check-availability">${t("checkAvailability")}</button>
         </div>
-        ${input(t("attendees"), "attendees", "number", draft.attendees || "6")}
+        ${input(t("attendees"), "attendees", "number", data.attendees || "6")}
         <div class="field wide">
           <label>${t("purpose")}</label>
-          <textarea name="purpose" placeholder="Meeting purpose">${escapeHtml(draft.purpose || "")}</textarea>
+          <textarea name="purpose" placeholder="Meeting purpose">${escapeHtml(data.purpose || "")}</textarea>
         </div>
       </div>
       <br>
-      <button class="btn" type="submit">${t("saveBooking")}</button>
+      <button class="btn" type="submit">${booking ? "Update booking" : t("saveBooking")}</button>
     </form>
   `;
 }
@@ -1373,15 +1450,34 @@ function bindEvents() {
       state.calendarMonth = state.selectedDate.slice(0, 7);
       render();
     });
+    button.addEventListener("dblclick", () => {
+      openBookingDraft(`${button.dataset.date}T09:00`);
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        state.selectedDate = button.dataset.date;
+        state.calendarMonth = state.selectedDate.slice(0, 7);
+        render();
+      }
+    });
   });
 
-  document.querySelectorAll("[data-action='book-selected-date']").forEach((button) => {
+  document.querySelectorAll("[data-slot-start]").forEach((slot) => {
+    slot.addEventListener("dblclick", () => openBookingDraft(slot.dataset.slotStart));
+  });
+
+  document.querySelectorAll("[data-booking-detail]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.modal = { type: "booking-detail", id: Number(button.dataset.bookingDetail) };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-booking]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.bookingDraft = {
-        startTime: `${state.selectedDate}T09:00`,
-        endTime: `${state.selectedDate}T10:00`
-      };
-      state.modal = { type: "booking" };
+      state.bookingDraft = null;
+      state.modal = { type: "booking", id: Number(button.dataset.editBooking) };
       render();
     });
   });
@@ -1474,7 +1570,7 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-cancel]").forEach((button) => {
-    button.addEventListener("click", () => updateBookingStatus(Number(button.dataset.cancel), "cancelled"));
+    button.addEventListener("click", () => cancelBooking(Number(button.dataset.cancel)));
   });
 
   bindDelete("room", "rooms");
@@ -1519,13 +1615,14 @@ async function handleForm(event) {
       return render();
     }
     await loadData();
-    const conflict = findConflict(Number(values.roomId), values.startTime, values.endTime);
+    const conflict = findConflict(Number(values.roomId), values.startTime, values.endTime, editId);
     if (conflict) {
       return showConflict(conflict);
     }
     let savedBooking;
     try {
       savedBooking = await put("bookings", {
+        ...(editId ? { id: editId } : {}),
         title: values.title,
         roomId: Number(values.roomId),
         requesterId: Number(values.requesterId),
@@ -1533,7 +1630,7 @@ async function handleForm(event) {
         startTime: values.startTime,
         endTime: values.endTime,
         attendees: Number(values.attendees),
-        status: "approved",
+        status: editId ? (byId(state.data.bookings, editId)?.status || "approved") : "approved",
         purpose: values.purpose,
         createdAt: new Date().toISOString()
       });
@@ -1551,7 +1648,7 @@ async function handleForm(event) {
     const room = byId(state.data.rooms, Number(values.roomId));
     addNotification({
       type: "success",
-      title: t("bookedSuccess"),
+      title: editId ? "Booking updated" : t("bookedSuccess"),
       message: `${savedBooking.title} · ${room?.name || "-"} · ${fmtDateTime(savedBooking.startTime)}`,
       createdAt: new Date().toISOString()
     });
@@ -1617,11 +1714,12 @@ async function handleForm(event) {
   notify(editId ? "Updated successfully." : "Saved successfully.");
 }
 
-function findConflict(roomId, startTime, endTime) {
+function findConflict(roomId, startTime, endTime, excludeId = null) {
   const start = new Date(startTime);
   const end = new Date(endTime);
   return state.data.bookings.find((booking) => {
     if (Number(booking.roomId) !== roomId || booking.status === "cancelled") return false;
+    if (excludeId && Number(booking.id) === Number(excludeId)) return false;
     const existingStart = new Date(booking.startTime);
     const existingEnd = new Date(booking.endTime);
     return start < existingEnd && end > existingStart;
@@ -1639,7 +1737,7 @@ function showAvailabilityResult(values) {
     state.alert = { title: "Invalid time", message: timeError };
     return render();
   }
-  const conflict = findConflict(Number(values.roomId), values.startTime, values.endTime);
+  const conflict = findConflict(Number(values.roomId), values.startTime, values.endTime, state.modal?.id);
   if (conflict) return showConflict(conflict);
   state.alert = {
     title: "Room available",
@@ -1695,6 +1793,24 @@ async function updateBookingStatus(id, status) {
   await loadData();
   render();
   notify(`Booking ${status}.`);
+}
+
+async function cancelBooking(id) {
+  const booking = byId(state.data.bookings, id);
+  if (!booking) return;
+  if (canManage()) {
+    await updateBookingStatus(id, "cancelled");
+    return;
+  }
+  if (Number(booking.requesterId) !== Number(state.currentUser?.id)) {
+    state.alert = { title: "View only", message: "Only the meeting creator can cancel this booking." };
+    render();
+    return;
+  }
+  await put("bookings", { ...booking, status: "cancelled" });
+  await loadData();
+  render();
+  notify("Booking cancelled.");
 }
 
 function bindDelete(kind, storeName) {

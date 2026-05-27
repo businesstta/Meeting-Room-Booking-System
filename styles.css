@@ -917,6 +917,10 @@ th {
 .day-panel {
   padding: 18px;
   overflow: visible;
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 .calendar-toolbar {
@@ -963,9 +967,9 @@ th {
   background: var(--field);
   color: var(--ink);
   text-align: left;
-  appearance: none;
   border-top: 0;
   border-left: 0;
+  cursor: pointer;
 }
 
 .calendar-cell.muted {
@@ -1003,8 +1007,18 @@ th {
   border-radius: 8px;
   padding: 5px 6px;
   background: var(--soft);
+  color: var(--ink);
   font-size: 11px;
   line-height: 1.25;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+
+.calendar-pill:hover,
+.day-slot-booking:hover {
+  outline: 1px dashed #60a5fa;
+  outline-offset: 2px;
 }
 
 .calendar-pill strong,
@@ -1058,11 +1072,16 @@ th {
   grid-template-columns: 62px 1fr;
   gap: 10px;
   align-items: start;
-  min-height: 48px;
-  padding: 10px;
+  min-height: 42px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--field);
+  cursor: default;
+}
+
+.day-slot.free {
+  cursor: pointer;
 }
 
 .day-slot.free {
@@ -1083,6 +1102,53 @@ th {
   display: block;
   color: var(--muted);
   line-height: 1.35;
+}
+
+.day-slot-booking {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  line-height: 1.35;
+}
+
+.booking-detail {
+  display: grid;
+  gap: 14px;
+}
+
+.detail-accent {
+  height: 5px;
+  margin: -20px -20px 4px;
+  border-radius: 14px 14px 0 0;
+  background: #2563eb;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-row strong,
+.detail-row span {
+  display: block;
+}
+
+.detail-row span {
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.detail-actions {
+  justify-content: flex-end;
 }
 
 .alert-modal {
