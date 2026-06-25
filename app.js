@@ -313,7 +313,7 @@ const state = {
     date: "",
     departmentId: "all",
     roomId: "all",
-    status: "all"
+    sortBy: "start-desc"
   },
   calendarMonth: localDate().slice(0, 7),
   selectedDate: localDate(),
@@ -562,7 +562,7 @@ function settingsSubmenu(notificationCount = 0) {
 }
 
 function visibleBookings(bookings = state.data.bookings) {
-  if (state.currentUser?.role === "administrator" || (state.currentUser?.role === "manager" && isAdminDepartmentUser())) return bookings;
+  if (["administrator", "manager"].includes(state.currentUser?.role)) return bookings;
   return bookings.filter((booking) => Number(booking.requesterId) === Number(state.currentUser?.id));
 }
 
@@ -1357,6 +1357,13 @@ function roomPanelTimeline(bookings) {
 }
 
 function filters() {
+  const sortOptions = [
+    ["start-desc", "Newest first"],
+    ["start-asc", "Oldest first"],
+    ["title-asc", "Meeting A-Z"],
+    ["room-asc", "Room A-Z"],
+    ["department-asc", "Department A-Z"]
+  ];
   return `
     <div class="filters">
       <div class="field">
@@ -1371,17 +1378,39 @@ function filters() {
         <label>Room</label>
         <select data-filter="roomId">${optionList(state.data.rooms, state.filters.roomId, t("allRooms"))}</select>
       </div>
+      <div class="field">
+        <label>Sort</label>
+        <select data-filter="sortBy">
+          ${sortOptions.map(([value, label]) => `<option value="${value}"${state.filters.sortBy === value ? " selected" : ""}>${label}</option>`).join("")}
+        </select>
+      </div>
     </div>
   `;
 }
 
 function filteredBookings() {
-  return visibleBookings().filter((booking) => {
+  const bookings = visibleBookings().filter((booking) => {
     const dateOk = !state.filters.date || booking.startTime.startsWith(state.filters.date);
     const depOk = state.filters.departmentId === "all" || Number(booking.departmentId) === Number(state.filters.departmentId);
     const roomOk = state.filters.roomId === "all" || Number(booking.roomId) === Number(state.filters.roomId);
     return dateOk && depOk && roomOk;
   });
+  return sortBookings(bookings);
+}
+
+function sortBookings(bookings) {
+  const copy = [...bookings];
+  const text = (value) => String(value || "").toLowerCase();
+  const byRoom = (booking) => byId(state.data.rooms, booking.roomId)?.name || "";
+  const byDepartment = (booking) => byId(state.data.departments, booking.departmentId)?.name || "";
+  const sorters = {
+    "start-asc": (a, b) => new Date(a.startTime) - new Date(b.startTime),
+    "start-desc": (a, b) => new Date(b.startTime) - new Date(a.startTime),
+    "title-asc": (a, b) => text(a.title).localeCompare(text(b.title)),
+    "room-asc": (a, b) => text(byRoom(a)).localeCompare(text(byRoom(b))),
+    "department-asc": (a, b) => text(byDepartment(a)).localeCompare(text(byDepartment(b)))
+  };
+  return copy.sort(sorters[state.filters.sortBy] || sorters["start-desc"]);
 }
 
 function bookingTable(bookings) {
@@ -1921,6 +1950,7 @@ function bindEvents() {
         // Returning to the login screen should still work if the session already expired.
       }
       localStorage.removeItem("roombook-current-user");
+      stopNotificationPolling();
       state.currentUser = null;
       state.roomPanel.active = false;
       state.roomPanel.login = false;
@@ -2048,6 +2078,7 @@ async function handleForm(event) {
     state.currentUser = user;
     state.view = "dashboard";
     await loadData();
+    startNotificationPolling();
     render();
     return notify("Logged in successfully.");
   }
@@ -2075,6 +2106,7 @@ async function handleForm(event) {
     }
     state.currentUser = user;
     await loadData();
+    startNotificationPolling();
     await loadRoomPanelData();
     state.roomPanel.login = false;
     state.roomPanel.active = true;
@@ -2372,6 +2404,7 @@ function deleteConfirmation(kind, storeName, id) {
 }
 
 let installPrompt = null;
+let notificationTimer = null;
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   installPrompt = event;
@@ -2380,6 +2413,7 @@ window.addEventListener("beforeinstallprompt", (event) => {
 document.addEventListener("click", async (event) => {
   if (event.target.matches("[data-action='logout']")) {
     await apiFetch("/api/logout", { method: "POST" }).catch(() => {});
+    stopNotificationPolling();
     localStorage.removeItem("roombook-current-user");
     state.currentUser = null;
     state.data = { departments: [], users: [], rooms: [], bookings: [] };
@@ -2402,11 +2436,35 @@ function notify(message) {
   window.setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
+async function refreshNotifications({ rerender = false } = {}) {
+  if (!state.currentUser) return;
+  const before = unreadNotifications().length;
+  const payload = await apiFetch("/api/notifications");
+  state.data.notifications = payload.notifications || [];
+  const after = unreadNotifications().length;
+  if (rerender || after !== before || state.view === "notifications") render();
+}
+
+function startNotificationPolling() {
+  stopNotificationPolling();
+  if (!state.currentUser) return;
+  notificationTimer = window.setInterval(() => {
+    refreshNotifications().catch(() => {});
+  }, 7000);
+}
+
+function stopNotificationPolling() {
+  if (!notificationTimer) return;
+  window.clearInterval(notificationTimer);
+  notificationTimer = null;
+}
+
 async function init() {
   const { user } = await apiFetch("/api/me");
   state.currentUser = user;
   if (state.currentUser) {
     await loadData();
+    startNotificationPolling();
   }
   render();
   if ("serviceWorker" in navigator) {

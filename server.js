@@ -3,6 +3,7 @@ import express from "express";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import nodemailer from "nodemailer";
 import pg from "pg";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,10 @@ const DATABASE_URL = process.env.DATABASE_URL || "postgres://postgres:postgres@l
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-this-secret-before-production";
 const SESSION_COOKIE = "atoz_session";
 const SESSION_HOURS = 8;
+const EMAIL_ENABLED = String(process.env.EMAIL_ENABLED || "false").toLowerCase() === "true";
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_SECURE = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
+const MAIL_FROM = process.env.MAIL_FROM || process.env.SMTP_USER || "";
 const DEFAULT_MODULE_PERMISSIONS = {
   administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "module-permissions", "change-password", "settings"],
   manager: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "change-password", "settings"],
@@ -39,6 +44,7 @@ const DEFAULT_MODULE_PERMISSIONS = {
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
+let mailTransport = null;
 
 app.disable("x-powered-by");
 app.use(express.json());
@@ -168,6 +174,66 @@ function notificationRow(row) {
     readAt: toIsoMinute(row.read_at),
     createdAt: toIsoMinute(row.created_at)
   };
+}
+
+function escapeEmailHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function emailConfigured() {
+  return Boolean(EMAIL_ENABLED && process.env.SMTP_HOST && MAIL_FROM);
+}
+
+function getMailTransport() {
+  if (!emailConfigured()) return null;
+  if (!mailTransport) {
+    mailTransport = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: process.env.SMTP_USER ? {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS || ""
+      } : undefined,
+      requireTLS: !SMTP_SECURE
+    });
+  }
+  return mailTransport;
+}
+
+async function sendMailToUser(userId, subject, message) {
+  const transport = getMailTransport();
+  if (!transport) return;
+  const result = await pool.query("SELECT email, name FROM users WHERE id = $1 AND is_active = true", [userId]);
+  const user = result.rows[0];
+  if (!user?.email) return;
+  await transport.sendMail({
+    from: MAIL_FROM,
+    to: user.email,
+    subject,
+    text: message,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
+        <h2>${escapeEmailHtml(subject)}</h2>
+        <p>${escapeEmailHtml(message)}</p>
+        <p style="color:#666;font-size:12px">AtoZ Group Meeting Room Booking System</p>
+      </div>
+    `
+  });
+}
+
+function queueMailToUser(userId, subject, message) {
+  if (!emailConfigured()) return;
+  setImmediate(() => {
+    sendMailToUser(userId, subject, message).catch((error) => {
+      console.error("Email notification failed:", error.message);
+    });
+  });
 }
 
 function settingsRow(row) {
@@ -316,6 +382,7 @@ async function createNotification({ userId, type = "info", title, message, booki
      VALUES ($1, $2, $3, $4, $5)`,
     [userId, type, title, message, bookingId]
   );
+  queueMailToUser(userId, title, message);
 }
 
 app.get("/api/health", asyncRoute(async (_req, res) => {
@@ -445,6 +512,11 @@ app.post("/api/notifications/read-all", asyncRoute(async (req, res) => {
   res.json({ ok: true });
 }));
 
+app.get("/api/notifications", asyncRoute(async (req, res) => {
+  const result = await pool.query("SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 100", [req.user.id]);
+  res.json({ notifications: result.rows.map(notificationRow) });
+}));
+
 app.post("/api/departments", requireManager, asyncRoute(async (req, res) => {
   const result = await pool.query(
     "INSERT INTO departments (name, code) VALUES ($1, $2) RETURNING *",
@@ -563,6 +635,7 @@ app.post("/api/bookings/:id/cancel", asyncRoute(async (req, res) => {
   const reason = String(req.body.reason || "").trim();
   if (!reason) return res.status(400).json({ message: "Cancellation reason is required." });
   const client = await pool.connect();
+  let emailNotice = null;
   try {
     await client.query("BEGIN");
     const existing = await client.query("SELECT * FROM bookings WHERE id = $1 FOR UPDATE", [req.params.id]);
@@ -588,19 +661,23 @@ app.post("/api/bookings/:id/cancel", asyncRoute(async (req, res) => {
     );
     const cancelled = bookingRow(result.rows[0]);
     if (Number(cancelled.requesterId) !== Number(req.user.id)) {
+      const title = "Booking cancelled";
+      const message = `${cancelled.title} was cancelled by ${req.user.name}. Reason: ${reason}`;
       await client.query(
         `INSERT INTO notifications (user_id, type, title, message, booking_id)
          VALUES ($1, $2, $3, $4, $5)`,
         [
           cancelled.requesterId,
           "cancelled",
-          "Booking cancelled",
-          `${cancelled.title} was cancelled by ${req.user.name}. Reason: ${reason}`,
+          title,
+          message,
           cancelled.id
         ]
       );
+      emailNotice = { userId: cancelled.requesterId, title, message };
     }
     await client.query("COMMIT");
+    if (emailNotice) queueMailToUser(emailNotice.userId, emailNotice.title, emailNotice.message);
     res.json(cancelled);
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
