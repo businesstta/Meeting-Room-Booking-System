@@ -824,6 +824,34 @@ th {
   border-style: dashed;
 }
 
+.permission-grid {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) repeat(3, minmax(84px, 0.5fr));
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0 18px;
+}
+
+.permission-grid > strong {
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--field);
+}
+
+.permission-check {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+}
+
+.permission-check input {
+  width: 18px;
+  height: 18px;
+}
+
 .notification-grid {
   display: grid;
   gap: 12px;
@@ -1544,6 +1572,10 @@ th {
 
   .calendar-cell {
     min-height: 118px;
+  }
+
+  .permission-grid {
+    grid-template-columns: 1fr;
   }
 
   .form-grid .wide {

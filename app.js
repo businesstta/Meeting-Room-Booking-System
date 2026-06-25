@@ -6,6 +6,7 @@ const i18n = {
     bookings: "Bookings",
     calendar: "Calendar",
     notifications: "Notifications",
+    settings: "Settings",
     rooms: "Rooms",
     users: "Users",
     departments: "Departments",
@@ -19,6 +20,7 @@ const i18n = {
     bookingsSub: "Create requests and approve or cancel reservations.",
     calendarSub: "See booked meeting rooms by date and time.",
     notificationsSub: "Meeting reminders and booking activity.",
+    settingsSub: "Manage module access and your account password.",
     roomsSub: "Manage room capacity, floor, and equipment.",
     usersSub: "Create normal users by department and assign access roles.",
     departmentsSub: "Maintain the company department structure.",
@@ -110,7 +112,18 @@ const i18n = {
     notificationDetail: "Notification detail",
     roomDisplayLogin: "Room display login",
     roomDisplayLoginHelp: "Administrator login is required to open the tablet room display.",
-    adminOnly: "Administrator access is required."
+    adminOnly: "Administrator access is required.",
+    modulePermissions: "Module permissions",
+    changePassword: "Change password",
+    oldPassword: "Old password",
+    newPassword: "New password",
+    saveSettings: "Save settings",
+    updatePassword: "Update password",
+    cancelBookingTitle: "Cancel booking?",
+    cancelBookingMessage: "Are you sure you want to cancel this booking?",
+    cancelReason: "Reason",
+    confirmCancel: "Confirm cancel",
+    bookingCancelled: "Booking cancelled"
   },
   my: {
     dashboard: "ဒက်ရှ်ဘုတ်",
@@ -221,7 +234,20 @@ const i18n = {
     notificationDetail: "အသိပေးချက် အသေးစိတ်",
     roomDisplayLogin: "Room display login",
     roomDisplayLoginHelp: "Tablet room display ဝင်ရန် administrator account လိုအပ်သည်။",
-    adminOnly: "Administrator access လိုအပ်သည်။"
+    adminOnly: "Administrator access လိုအပ်သည်။",
+    settings: "Settings",
+    settingsSub: "Module access နှင့် password ပြင်ရန်။",
+    modulePermissions: "Module permissions",
+    changePassword: "Password ပြင်မည်",
+    oldPassword: "Password အဟောင်း",
+    newPassword: "Password အသစ်",
+    saveSettings: "Settings သိမ်းမည်",
+    updatePassword: "Password update လုပ်မည်",
+    cancelBookingTitle: "Booking cancel လုပ်မလား?",
+    cancelBookingMessage: "ဤ booking ကို cancel လုပ်မှာ သေချာပါသလား?",
+    cancelReason: "Reason",
+    confirmCancel: "Confirm cancel",
+    bookingCancelled: "Booking cancelled"
   }
 };
 
@@ -278,7 +304,7 @@ const state = {
   alert: null,
   currentUser: null,
   bookingDraft: null,
-  data: { departments: [], users: [], rooms: [], bookings: [] },
+  data: { departments: [], users: [], rooms: [], bookings: [], notifications: [], settings: { modulePermissions: {} } },
   filters: {
     date: "",
     departmentId: "all",
@@ -309,7 +335,8 @@ const navItems = [
   { id: "notifications", labelKey: "notifications", icon: "bell" },
   { id: "rooms", labelKey: "rooms", icon: "rooms", managerOnly: true },
   { id: "users", labelKey: "users", icon: "users", managerOnly: true },
-  { id: "departments", labelKey: "departments", icon: "departments", managerOnly: true }
+  { id: "departments", labelKey: "departments", icon: "departments", managerOnly: true },
+  { id: "settings", labelKey: "settings", icon: "settings" }
 ];
 
 function t(key) {
@@ -325,6 +352,7 @@ function icon(name) {
     rooms: `<path d="M4 21V5a2 2 0 0 1 2-2h9v18"/><path d="M15 8h3a2 2 0 0 1 2 2v11M11 12h.01"/>`,
     users: `<path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
     departments: `<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01"/>`,
+    settings: `<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="m19.4 15 .4 2.2-2 1.2-1.8-1.4a7.5 7.5 0 0 1-2 .8L13.4 20h-2.8l-.6-2.2a7.5 7.5 0 0 1-2-.8l-1.8 1.4-2-1.2.4-2.2a7 7 0 0 1-1-1.8L1.5 12l2.1-1.2a7 7 0 0 1 1-1.8l-.4-2.2 2-1.2L8 7a7.5 7.5 0 0 1 2-.8L10.6 4h2.8l.6 2.2a7.5 7.5 0 0 1 2 .8l1.8-1.4 2 1.2-.4 2.2a7 7 0 0 1 1 1.8L22.5 12l-2.1 1.2a7 7 0 0 1-1 1.8Z"/>`,
     collapse: `<path d="M15 18 9 12l6-6"/><path d="M20 4v16M4 4v16"/>`,
     expand: `<path d="m9 18 6-6-6-6"/><path d="M4 4v16M20 4v16"/>`,
     display: `<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>`
@@ -348,12 +376,14 @@ function localDateAt(time) {
 }
 
 async function loadData() {
-  const { departments, users, rooms, bookings } = await apiFetch("/api/data");
+  const { departments, users, rooms, bookings, notifications = [], settings = { modulePermissions: {} } } = await apiFetch("/api/data");
   state.data = {
     departments,
     users,
     rooms,
-    bookings: bookings.sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
+    bookings: bookings.sort((a, b) => new Date(a.startTime) - new Date(b.startTime)),
+    notifications,
+    settings
   };
 }
 
@@ -450,12 +480,38 @@ function canManage() {
   return ["administrator", "manager"].includes(state.currentUser?.role);
 }
 
+function isAdminDepartmentUser() {
+  const department = byId(state.data.departments, state.currentUser?.departmentId);
+  return department?.code === "ADM" || /admin/i.test(department?.name || "");
+}
+
+function canCancelBooking(booking) {
+  if (!booking || booking.status === "cancelled") return false;
+  if (Number(booking.requesterId) === Number(state.currentUser?.id)) return true;
+  if (state.currentUser?.role === "administrator") return true;
+  return state.currentUser?.role === "manager" && isAdminDepartmentUser();
+}
+
+function roleModulePermissions(role = state.currentUser?.role) {
+  const defaults = {
+    administrator: navItems.map((item) => item.id),
+    manager: navItems.map((item) => item.id),
+    user: ["dashboard", "bookings", "calendar", "notifications", "settings"]
+  };
+  return state.data.settings?.modulePermissions?.[role] || defaults[role] || defaults.user;
+}
+
+function canAccessModule(moduleId) {
+  if (state.currentUser?.role === "administrator") return true;
+  return roleModulePermissions().includes(moduleId);
+}
+
 function visibleNavItems() {
-  return navItems.filter((item) => !item.managerOnly || canManage());
+  return navItems.filter((item) => (!item.managerOnly || canManage()) && canAccessModule(item.id));
 }
 
 function visibleBookings(bookings = state.data.bookings) {
-  if (canManage()) return bookings;
+  if (state.currentUser?.role === "administrator" || (state.currentUser?.role === "manager" && isAdminDepartmentUser())) return bookings;
   return bookings.filter((booking) => Number(booking.requesterId) === Number(state.currentUser?.id));
 }
 
@@ -592,7 +648,8 @@ function topbar() {
     notifications: [t("notifications"), t("notificationsSub")],
     rooms: [t("rooms"), t("roomsSub")],
     users: [t("users"), t("usersSub")],
-    departments: [t("departments"), t("departmentsSub")]
+    departments: [t("departments"), t("departmentsSub")],
+    settings: [t("settings"), t("settingsSub")]
   };
   const [title, subtitle] = labels[state.view];
   const action = {
@@ -602,8 +659,9 @@ function topbar() {
     notifications: `<button class="btn" data-modal="booking">${t("newBooking")}</button>`,
     rooms: `<button class="btn" data-modal="room">${t("newRoom")}</button>`,
     users: `<button class="btn" data-modal="user">${t("newUser")}</button>`,
-    departments: `<button class="btn" data-modal="department">${t("newDepartment")}</button>`
-  }[state.view];
+    departments: `<button class="btn" data-modal="department">${t("newDepartment")}</button>`,
+    settings: ""
+  }[state.view] || "";
 
   return `
     <div class="topbar">
@@ -772,6 +830,50 @@ const views = {
             </article>
           `;
         }).join("")}
+      </section>
+    `;
+  },
+  settings() {
+    const modules = navItems.map((item) => item.id);
+    const roles = ["administrator", "manager", "user"];
+    return `
+      <section class="grid two">
+        ${state.currentUser?.role === "administrator" ? `
+          <form class="card" data-form="settings">
+            <div class="section-title">
+              <h2>${t("modulePermissions")}</h2>
+              <span class="status">${t("adminOnly")}</span>
+            </div>
+            <div class="permission-grid">
+              <div></div>
+              ${roles.map((role) => `<strong>${role}</strong>`).join("")}
+              ${modules.map((moduleId) => `
+                <strong>${t(navItems.find((item) => item.id === moduleId)?.labelKey || moduleId)}</strong>
+                ${roles.map((role) => {
+                  const checked = roleModulePermissions(role).includes(moduleId);
+                  const disabled = role === "administrator" || moduleId === "settings";
+                  return `
+                    <label class="permission-check">
+                      <input type="checkbox" name="${role}:${moduleId}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
+                    </label>
+                  `;
+                }).join("")}
+              `).join("")}
+            </div>
+            <button class="btn" type="submit">${t("saveSettings")}</button>
+          </form>
+        ` : ""}
+        <form class="card" data-form="change-password">
+          <div class="section-title">
+            <h2>${t("changePassword")}</h2>
+          </div>
+          <div class="form-grid">
+            ${input(t("oldPassword"), "oldPassword", "password", "")}
+            ${input(t("newPassword"), "newPassword", "password", "")}
+          </div>
+          <br>
+          <button class="btn" type="submit">${t("updatePassword")}</button>
+        </form>
       </section>
     `;
   }
@@ -995,7 +1097,7 @@ function toLocalInputValue(date) {
 
 function notifications() {
   const reminders = upcomingReminders();
-  return [...reminders, ...state.notifications].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return [...reminders, ...(state.data.notifications || []), ...state.notifications].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
 function unreadNotifications() {
@@ -1014,6 +1116,7 @@ function persistNotificationState() {
 function markNotificationRead(id) {
   const idText = String(id);
   state.notifications = state.notifications.map((item) => String(item.id) === idText ? { ...item, readAt: item.readAt || new Date().toISOString() } : item);
+  state.data.notifications = (state.data.notifications || []).map((item) => String(item.id) === idText ? { ...item, readAt: item.readAt || new Date().toISOString() } : item);
   if (!state.readNotificationIds.includes(idText)) state.readNotificationIds.push(idText);
   persistNotificationState();
 }
@@ -1245,8 +1348,7 @@ function bookingTable(bookings) {
                 <td><span class="status ${booking.status}">${booking.status}</span></td>
                 <td>
                   <div class="actions">
-                    ${canManage() && booking.status === "pending" ? `<button class="btn ghost" data-approve="${booking.id}">Approve</button>` : ""}
-                    ${booking.status !== "cancelled" ? `<button class="btn ghost" data-cancel="${booking.id}">Cancel</button>` : ""}
+                    ${canCancelBooking(booking) ? `<button class="btn ghost" data-cancel="${booking.id}">Cancel</button>` : ""}
                   </div>
                 </td>
               </tr>
@@ -1281,6 +1383,7 @@ function modal() {
 function alertDialog() {
   if (!state.alert) return "";
   const confirm = state.alert.confirmDelete;
+  const cancel = state.alert.confirmCancel;
   return `
     <div class="modal open alert-modal">
       <div class="modal-panel alert-panel ${state.alert.tone === "danger" ? "danger" : ""}">
@@ -1295,6 +1398,18 @@ function alertDialog() {
             <button type="button" class="btn ghost" data-action="close-alert">Cancel</button>
             <button type="button" class="btn danger" data-confirm-delete="${escapeHtml(confirm.kind)}" data-id="${confirm.id}">Delete</button>
           </div>
+        ` : cancel ? `
+          <form data-form="cancel-booking">
+            <input type="hidden" name="bookingId" value="${cancel.id}">
+            <div class="field">
+              <label>${t("cancelReason")}</label>
+              <textarea name="reason" required placeholder="${t("cancelReason")}"></textarea>
+            </div>
+            <div class="actions confirm-actions">
+              <button type="button" class="btn ghost" data-action="close-alert">Close</button>
+              <button type="submit" class="btn danger">${t("confirmCancel")}</button>
+            </div>
+          </form>
         ` : `<button type="button" class="btn full" data-action="close-alert">OK</button>`}
       </div>
     </div>
@@ -1341,10 +1456,11 @@ function bookingDetail() {
         </div>
       </div>
       ${booking.purpose ? `<div class="alert-detail">${escapeHtml(booking.purpose)}</div>` : ""}
+      ${booking.cancelReason ? `<div class="alert-detail"><strong>${t("cancelReason")}</strong><br>${escapeHtml(booking.cancelReason)}</div>` : ""}
       <div class="actions detail-actions">
         ${editable ? `
           <button type="button" class="btn" data-edit-booking="${booking.id}">${t("edit")}</button>
-          <button type="button" class="btn danger" data-cancel="${booking.id}">Cancel</button>
+          ${canCancelBooking(booking) ? `<button type="button" class="btn danger" data-cancel="${booking.id}">Cancel</button>` : ""}
         ` : `<span class="status">View only</span>`}
       </div>
     </div>
@@ -1655,16 +1771,28 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-notification]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       markNotificationRead(button.dataset.notification);
+      if (!String(button.dataset.notification).startsWith("reminder-")) {
+        try {
+          await apiFetch(`/api/notifications/${button.dataset.notification}/read`, { method: "POST" });
+        } catch (error) {
+          // Local read state still keeps the badge responsive if the item was already removed.
+        }
+      }
       state.modal = { type: "notification-detail", id: button.dataset.notification };
       render();
     });
   });
 
   document.querySelectorAll("[data-action='mark-all-read']").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       markAllNotificationsRead();
+      try {
+        await apiFetch("/api/notifications/read-all", { method: "POST" });
+      } catch (error) {
+        // Keep the UI readable even if an old local reminder is the only unread item.
+      }
       render();
     });
   });
@@ -1776,7 +1904,12 @@ function bindEvents() {
   });
 
   document.querySelectorAll("form[data-form]").forEach((form) => {
-    form.addEventListener("submit", handleForm);
+    form.addEventListener("submit", (event) => {
+      handleForm(event).catch((error) => {
+        state.alert = { title: "Request failed", message: error.payload?.message || error.message || "Please try again.", tone: "danger" };
+        render();
+      });
+    });
   });
 
   document.querySelectorAll("[data-approve]").forEach((button) => {
@@ -1890,12 +2023,59 @@ async function handleForm(event) {
     state.selectedDate = values.startTime.slice(0, 10);
     state.bookingDraft = null;
     const room = byId(state.data.rooms, Number(values.roomId));
-    addNotification({
-      type: "success",
-      title: editId ? "Booking updated" : t("bookedSuccess"),
-      message: `${savedBooking.title} · ${room?.name || "-"} · ${fmtDateTime(savedBooking.startTime)}`,
-      createdAt: new Date().toISOString()
+    if (editId) {
+      addNotification({
+        type: "success",
+        title: "Booking updated",
+        message: `${savedBooking.title} - ${room?.name || "-"} - ${fmtDateTime(savedBooking.startTime)}`,
+        createdAt: new Date().toISOString()
+      });
+    }
+  }
+
+  if (type === "cancel-booking") {
+    const reason = String(values.reason || "").trim();
+    if (!reason) {
+      state.alert = { ...state.alert, message: `${t("cancelBookingMessage")} ${t("cancelReason")} is required.`, tone: "danger" };
+      return render();
+    }
+    await apiFetch(`/api/bookings/${Number(values.bookingId)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
     });
+    state.alert = null;
+    state.modal = null;
+    await loadData();
+    render();
+    return notify(t("bookingCancelled"));
+  }
+
+  if (type === "settings") {
+    const modulePermissions = {};
+    ["administrator", "manager", "user"].forEach((role) => {
+      modulePermissions[role] = role === "administrator" ? navItems.map((item) => item.id) : ["settings"];
+      navItems.forEach((item) => {
+        if (values[`${role}:${item.id}`] === "on" && !modulePermissions[role].includes(item.id)) {
+          modulePermissions[role].push(item.id);
+        }
+      });
+    });
+    const settings = await apiFetch("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify({ modulePermissions })
+    });
+    state.data.settings = settings;
+    render();
+    return notify("Settings saved.");
+  }
+
+  if (type === "change-password") {
+    await apiFetch("/api/me/password", {
+      method: "POST",
+      body: JSON.stringify({ oldPassword: values.oldPassword, newPassword: values.newPassword })
+    });
+    render();
+    return notify("Password updated.");
   }
 
   if (type === "room") {
@@ -2050,19 +2230,18 @@ async function updateBookingStatus(id, status) {
 async function cancelBooking(id) {
   const booking = byId(state.data.bookings, id);
   if (!booking) return;
-  if (canManage()) {
-    await updateBookingStatus(id, "cancelled");
-    return;
-  }
-  if (Number(booking.requesterId) !== Number(state.currentUser?.id)) {
-    state.alert = { title: "View only", message: "Only the meeting creator can cancel this booking." };
+  if (!canCancelBooking(booking)) {
+    state.alert = { title: "View only", message: "You cannot cancel this booking." };
     render();
     return;
   }
-  await put("bookings", { ...booking, status: "cancelled" });
-  await loadData();
+  state.alert = {
+    title: t("cancelBookingTitle"),
+    message: t("cancelBookingMessage"),
+    tone: "danger",
+    confirmCancel: { id }
+  };
   render();
-  notify("Booking cancelled.");
 }
 
 function bindDelete(kind, storeName) {

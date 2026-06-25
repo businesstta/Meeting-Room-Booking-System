@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS bookings (
   attendees INTEGER NOT NULL CHECK (attendees > 0),
   status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'cancelled')) DEFAULT 'approved',
   purpose TEXT,
+  cancelled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  cancel_reason TEXT,
+  cancelled_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (end_time > start_time)
 );
@@ -52,6 +55,30 @@ CREATE INDEX IF NOT EXISTS idx_bookings_department ON bookings(department_id);
 CREATE INDEX IF NOT EXISTS idx_users_department ON users(department_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL DEFAULT 'info',
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+  read_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  module_permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (id = 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at);
+
+INSERT INTO app_settings (id, module_permissions) VALUES
+  (1, '{"administrator":["dashboard","bookings","calendar","notifications","rooms","users","departments","settings"],"manager":["dashboard","bookings","calendar","notifications","rooms","users","departments","settings"],"user":["dashboard","bookings","calendar","notifications","settings"]}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO departments (id, name, code) VALUES
   (1, 'Administration', 'ADM'),

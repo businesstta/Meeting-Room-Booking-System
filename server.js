@@ -31,6 +31,11 @@ const DATABASE_URL = process.env.DATABASE_URL || "postgres://postgres:postgres@l
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-this-secret-before-production";
 const SESSION_COOKIE = "atoz_session";
 const SESSION_HOURS = 8;
+const DEFAULT_MODULE_PERMISSIONS = {
+  administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "settings"],
+  manager: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "settings"],
+  user: ["dashboard", "bookings", "calendar", "notifications", "settings"]
+};
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
@@ -145,11 +150,36 @@ function bookingRow(row) {
     attendees: row.attendees,
     status: row.status,
     purpose: row.purpose || "",
+    createdAt: toIsoMinute(row.created_at),
+    cancelledBy: row.cancelled_by,
+    cancelReason: row.cancel_reason || "",
+    cancelledAt: toIsoMinute(row.cancelled_at)
+  };
+}
+
+function notificationRow(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    type: row.type,
+    title: row.title,
+    message: row.message,
+    bookingId: row.booking_id,
+    readAt: toIsoMinute(row.read_at),
     createdAt: toIsoMinute(row.created_at)
   };
 }
 
+function settingsRow(row) {
+  return {
+    modulePermissions: row?.module_permissions || DEFAULT_MODULE_PERMISSIONS
+  };
+}
+
 async function migrateSecurity() {
+  await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_by INTEGER REFERENCES users(id) ON DELETE SET NULL");
+  await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT");
+  await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       token_hash TEXT PRIMARY KEY,
@@ -158,6 +188,31 @@ async function migrateSecurity() {
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL DEFAULT 'info',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+      read_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at)");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      module_permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (id = 1)
+    )
+  `);
+  await pool.query(
+    "INSERT INTO app_settings (id, module_permissions) VALUES (1, $1::jsonb) ON CONFLICT (id) DO NOTHING",
+    [JSON.stringify(DEFAULT_MODULE_PERMISSIONS)]
+  );
   await pool.query("DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP");
 
   const users = await pool.query("SELECT id, password FROM users");
@@ -167,18 +222,22 @@ async function migrateSecurity() {
   }
 }
 
-async function allData() {
-  const [departments, users, rooms, bookings] = await Promise.all([
+async function allData(user) {
+  const [departments, users, rooms, bookings, notifications, settings] = await Promise.all([
     pool.query("SELECT * FROM departments ORDER BY id"),
     pool.query("SELECT id, name, username, email, role, department_id, is_active, created_at FROM users ORDER BY id"),
     pool.query("SELECT * FROM rooms ORDER BY id"),
-    pool.query("SELECT * FROM bookings ORDER BY start_time, id")
+    pool.query("SELECT * FROM bookings ORDER BY start_time, id"),
+    pool.query("SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 100", [user.id]),
+    pool.query("SELECT module_permissions FROM app_settings WHERE id = 1")
   ]);
   return {
     departments: departments.rows.map(departmentRow),
     users: users.rows.map(userRow),
     rooms: rooms.rows.map(roomRow),
-    bookings: bookings.rows.map(bookingRow)
+    bookings: bookings.rows.map(bookingRow),
+    notifications: notifications.rows.map(notificationRow),
+    settings: settingsRow(settings.rows[0])
   };
 }
 
@@ -230,6 +289,33 @@ function requireManager(req, res, next) {
     return res.status(403).json({ message: "Manager access is required." });
   }
   next();
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== "administrator") {
+    return res.status(403).json({ message: "Administrator access is required." });
+  }
+  next();
+}
+
+function isAdminDepartment(department) {
+  return department?.code === "ADM" || /admin/i.test(department?.name || "");
+}
+
+async function canCancelBooking(req, booking) {
+  if (Number(booking.requester_id) === Number(req.user.id)) return true;
+  if (req.user.role === "administrator") return true;
+  if (req.user.role !== "manager") return false;
+  const department = await pool.query("SELECT * FROM departments WHERE id = $1", [req.user.departmentId]);
+  return isAdminDepartment(department.rows[0]);
+}
+
+async function createNotification({ userId, type = "info", title, message, bookingId = null }) {
+  await pool.query(
+    `INSERT INTO notifications (user_id, type, title, message, booking_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, type, title, message, bookingId]
+  );
 }
 
 app.get("/api/health", asyncRoute(async (_req, res) => {
@@ -311,8 +397,52 @@ app.post("/api/logout", asyncRoute(async (req, res) => {
 
 app.use("/api", requireAuth);
 
-app.get("/api/data", asyncRoute(async (_req, res) => {
-  res.json(await allData());
+app.get("/api/data", asyncRoute(async (req, res) => {
+  res.json(await allData(req.user));
+}));
+
+app.get("/api/settings", asyncRoute(async (_req, res) => {
+  const result = await pool.query("SELECT module_permissions FROM app_settings WHERE id = 1");
+  res.json(settingsRow(result.rows[0]));
+}));
+
+app.put("/api/settings", requireAdmin, asyncRoute(async (req, res) => {
+  const modulePermissions = req.body.modulePermissions || DEFAULT_MODULE_PERMISSIONS;
+  const result = await pool.query(
+    `UPDATE app_settings
+        SET module_permissions = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+      RETURNING module_permissions`,
+    [JSON.stringify(modulePermissions)]
+  );
+  res.json(settingsRow(result.rows[0]));
+}));
+
+app.post("/api/me/password", asyncRoute(async (req, res) => {
+  const oldPassword = String(req.body.oldPassword || "");
+  const newPassword = String(req.body.newPassword || "");
+  if (newPassword.length < 6) return res.status(400).json({ message: "New password must be at least 6 characters." });
+  const result = await pool.query("SELECT id, password FROM users WHERE id = $1", [req.user.id]);
+  const passwordResult = result.rows[0] ? verifyPassword(oldPassword, result.rows[0].password) : { ok: false };
+  if (!passwordResult.ok) return res.status(400).json({ message: "Old password is incorrect." });
+  await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hashPassword(newPassword), req.user.id]);
+  res.json({ ok: true });
+}));
+
+app.post("/api/notifications/:id/read", asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP)
+      WHERE id = $1 AND user_id = $2
+      RETURNING *`,
+    [req.params.id, req.user.id]
+  );
+  if (!result.rows[0]) return res.status(404).json({ message: "Notification not found." });
+  res.json(notificationRow(result.rows[0]));
+}));
+
+app.post("/api/notifications/read-all", asyncRoute(async (req, res) => {
+  await pool.query("UPDATE notifications SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP) WHERE user_id = $1", [req.user.id]);
+  res.json({ ok: true });
 }));
 
 app.post("/api/departments", requireManager, asyncRoute(async (req, res) => {
@@ -398,7 +528,15 @@ app.post("/api/bookings", asyncRoute(async (req, res) => {
      RETURNING *`,
     [req.body.title, Number(req.body.roomId), requesterId, departmentId, req.body.startTime, req.body.endTime, Number(req.body.attendees), req.body.purpose || ""]
   );
-  res.status(201).json(bookingRow(result.rows[0]));
+  const booking = bookingRow(result.rows[0]);
+  await createNotification({
+    userId: requesterId,
+    type: "success",
+    title: "Booking successful",
+    message: `${booking.title} has been booked.`,
+    bookingId: booking.id
+  });
+  res.status(201).json(booking);
 }));
 
 app.put("/api/bookings/:id", asyncRoute(async (req, res) => {
@@ -421,7 +559,40 @@ app.put("/api/bookings/:id", asyncRoute(async (req, res) => {
   res.json(bookingRow(result.rows[0]));
 }));
 
+app.post("/api/bookings/:id/cancel", asyncRoute(async (req, res) => {
+  const reason = String(req.body.reason || "").trim();
+  if (!reason) return res.status(400).json({ message: "Cancellation reason is required." });
+  const existing = await pool.query("SELECT * FROM bookings WHERE id = $1", [req.params.id]);
+  const booking = existing.rows[0];
+  if (!booking) return res.status(404).json({ message: "Booking not found." });
+  if (booking.status === "cancelled") return res.json(bookingRow(booking));
+  if (!(await canCancelBooking(req, booking))) {
+    return res.status(403).json({ message: "You cannot cancel this booking." });
+  }
+  const result = await pool.query(
+    `UPDATE bookings
+        SET status = 'cancelled', cancel_reason = $1, cancelled_by = $2, cancelled_at = CURRENT_TIMESTAMP
+      WHERE id = $3
+      RETURNING *`,
+    [reason, req.user.id, req.params.id]
+  );
+  const cancelled = bookingRow(result.rows[0]);
+  if (Number(cancelled.requesterId) !== Number(req.user.id)) {
+    await createNotification({
+      userId: cancelled.requesterId,
+      type: "cancelled",
+      title: "Booking cancelled",
+      message: `${cancelled.title} was cancelled by ${req.user.name}. Reason: ${reason}`,
+      bookingId: cancelled.id
+    });
+  }
+  res.json(cancelled);
+}));
+
 app.patch("/api/bookings/:id/status", requireManager, asyncRoute(async (req, res) => {
+  if (req.body.status === "cancelled") {
+    return res.status(400).json({ message: "Use the cancel endpoint with a reason." });
+  }
   const result = await pool.query("UPDATE bookings SET status = $1 WHERE id = $2 RETURNING *", [req.body.status, req.params.id]);
   res.json(bookingRow(result.rows[0]));
 }));
