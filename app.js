@@ -363,6 +363,8 @@ function icon(name) {
     users: `<path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>`,
     departments: `<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/><path d="M9 10h.01M15 10h.01"/>`,
     settings: `<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="m19.4 15 .4 2.2-2 1.2-1.8-1.4a7.5 7.5 0 0 1-2 .8L13.4 20h-2.8l-.6-2.2a7.5 7.5 0 0 1-2-.8l-1.8 1.4-2-1.2.4-2.2a7 7 0 0 1-1-1.8L1.5 12l2.1-1.2a7 7 0 0 1 1-1.8l-.4-2.2 2-1.2L8 7a7.5 7.5 0 0 1 2-.8L10.6 4h2.8l.6 2.2a7.5 7.5 0 0 1 2 .8l1.8-1.4 2 1.2-.4 2.2a7 7 0 0 1 1 1.8L22.5 12l-2.1 1.2a7 7 0 0 1-1 1.8Z"/>`,
+    eye: `<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>`,
+    eyeOff: `<path d="m3 3 18 18"/><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"/><path d="M9.9 4.2A10.9 10.9 0 0 1 12 4.0c6.5 0 10 8 10 8a18.5 18.5 0 0 1-3.1 4.2"/><path d="M6.6 6.6C3.8 8.5 2 12 2 12s3.5 8 10 8a10.8 10.8 0 0 0 5.4-1.5"/>`,
     collapse: `<path d="M15 18 9 12l6-6"/><path d="M20 4v16M4 4v16"/>`,
     expand: `<path d="m9 18 6-6-6-6"/><path d="M4 4v16M20 4v16"/>`,
     display: `<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>`
@@ -674,7 +676,7 @@ function loginScreen() {
           </div>
           <div class="field">
             <label>${t("password")}</label>
-            <input name="password" type="password" value="admin123" autocomplete="current-password" required>
+            ${passwordControl("password", "admin123")}
           </div>
           <button class="btn full" type="submit">${t("login")}</button>
         </form>
@@ -1073,7 +1075,7 @@ function roomDisplayLoginScreen() {
           </div>
           <div class="field">
             <label>${t("password")}</label>
-            <input name="password" type="password" autocomplete="current-password" required>
+            ${passwordControl("password", "")}
           </div>
           <button class="btn full" type="submit">${t("login")}</button>
         </form>
@@ -1716,7 +1718,18 @@ function input(label, name, type, value, required = true) {
   return `
     <div class="field">
       <label>${label}</label>
-      <input name="${name}" type="${type}" value="${escapeHtml(value)}"${required ? " required" : ""}>
+      ${type === "password" ? passwordControl(name, value, required) : `<input name="${name}" type="${type}" value="${escapeHtml(value)}"${required ? " required" : ""}>`}
+    </div>
+  `;
+}
+
+function passwordControl(name, value = "", required = true) {
+  return `
+    <div class="password-control">
+      <input name="${name}" type="password" value="${escapeHtml(value)}" autocomplete="${name === "password" ? "current-password" : "new-password"}"${required ? " required" : ""}>
+      <button type="button" class="password-toggle" data-action="toggle-password" aria-label="Show password" title="Show password">
+        ${icon("eye")}
+      </button>
     </div>
   `;
 }
@@ -1793,6 +1806,18 @@ function bindEvents() {
       state.navCollapsed = !state.navCollapsed;
       localStorage.setItem("roombook-nav-collapsed", String(state.navCollapsed));
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-password']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const inputEl = button.closest(".password-control")?.querySelector("input");
+      if (!inputEl) return;
+      const show = inputEl.type === "password";
+      inputEl.type = show ? "text" : "password";
+      button.innerHTML = icon(show ? "eyeOff" : "eye");
+      button.setAttribute("aria-label", show ? "Hide password" : "Show password");
+      button.title = show ? "Hide password" : "Show password";
     });
   });
 

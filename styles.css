@@ -642,6 +642,40 @@ button {
   resize: vertical;
 }
 
+.password-control {
+  position: relative;
+  display: grid;
+}
+
+.password-control input {
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.password-toggle:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.password-toggle .icon {
+  width: 18px;
+  height: 18px;
+}
+
 .time-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
