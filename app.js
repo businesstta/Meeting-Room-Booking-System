@@ -320,6 +320,7 @@ const state = {
   calendarView: localStorage.getItem("roombook-calendar-view") || "month",
   navOpen: false,
   navCollapsed: localStorage.getItem("roombook-nav-collapsed") === "true",
+  settingsOpen: localStorage.getItem("roombook-settings-open") === "true",
   notifications: JSON.parse(localStorage.getItem("roombook-notifications") || "[]"),
   readNotificationIds: JSON.parse(localStorage.getItem("roombook-read-notifications") || "[]"),
   roomPanel: {
@@ -546,14 +547,15 @@ function settingsSubmenu(notificationCount = 0) {
   const children = settingsNavItems.filter((item) => canShowNavItem(item));
   if (!children.length) return "";
   const active = children.some((item) => item.id === state.view);
+  const open = state.settingsOpen || active;
   return `
-    <div class="nav-group ${active ? "active" : ""}">
-      <div class="nav-group-label" title="${t("settings")}">
+    <div class="nav-group ${active ? "active" : ""} ${open ? "open" : ""}">
+      <button class="nav-group-label" type="button" data-action="toggle-settings" title="${t("settings")}" aria-expanded="${open}">
         <span class="nav-icon">${icon("settings")}</span>
         <strong>${t("settings")}</strong>
-      </div>
+      </button>
       <div class="nav-submenu">
-        ${children.map((item) => navButton(item, notificationCount)).join("")}
+        ${open ? children.map((item) => navButton(item, notificationCount)).join("") : ""}
       </div>
     </div>
   `;
@@ -1748,9 +1750,16 @@ function timeInput(label, name, value) {
 
 function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.view = button.dataset.view;
       state.navOpen = false;
+      if (state.currentUser) {
+        try {
+          await loadData();
+        } catch (error) {
+          // Keep navigation responsive if the session expires between refreshes.
+        }
+      }
       render();
     });
   });
@@ -1805,6 +1814,14 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.navCollapsed = !state.navCollapsed;
       localStorage.setItem("roombook-nav-collapsed", String(state.navCollapsed));
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-settings']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.settingsOpen = !state.settingsOpen;
+      localStorage.setItem("roombook-settings-open", String(state.settingsOpen));
       render();
     });
   });

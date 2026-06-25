@@ -562,31 +562,52 @@ app.put("/api/bookings/:id", asyncRoute(async (req, res) => {
 app.post("/api/bookings/:id/cancel", asyncRoute(async (req, res) => {
   const reason = String(req.body.reason || "").trim();
   if (!reason) return res.status(400).json({ message: "Cancellation reason is required." });
-  const existing = await pool.query("SELECT * FROM bookings WHERE id = $1", [req.params.id]);
-  const booking = existing.rows[0];
-  if (!booking) return res.status(404).json({ message: "Booking not found." });
-  if (booking.status === "cancelled") return res.json(bookingRow(booking));
-  if (!(await canCancelBooking(req, booking))) {
-    return res.status(403).json({ message: "You cannot cancel this booking." });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query("SELECT * FROM bookings WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const booking = existing.rows[0];
+    if (!booking) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Booking not found." });
+    }
+    if (booking.status === "cancelled") {
+      await client.query("COMMIT");
+      return res.json(bookingRow(booking));
+    }
+    if (!(await canCancelBooking(req, booking))) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ message: "You cannot cancel this booking." });
+    }
+    const result = await client.query(
+      `UPDATE bookings
+          SET status = 'cancelled', cancel_reason = $1, cancelled_by = $2, cancelled_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING *`,
+      [reason, req.user.id, req.params.id]
+    );
+    const cancelled = bookingRow(result.rows[0]);
+    if (Number(cancelled.requesterId) !== Number(req.user.id)) {
+      await client.query(
+        `INSERT INTO notifications (user_id, type, title, message, booking_id)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          cancelled.requesterId,
+          "cancelled",
+          "Booking cancelled",
+          `${cancelled.title} was cancelled by ${req.user.name}. Reason: ${reason}`,
+          cancelled.id
+        ]
+      );
+    }
+    await client.query("COMMIT");
+    res.json(cancelled);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-  const result = await pool.query(
-    `UPDATE bookings
-        SET status = 'cancelled', cancel_reason = $1, cancelled_by = $2, cancelled_at = CURRENT_TIMESTAMP
-      WHERE id = $3
-      RETURNING *`,
-    [reason, req.user.id, req.params.id]
-  );
-  const cancelled = bookingRow(result.rows[0]);
-  if (Number(cancelled.requesterId) !== Number(req.user.id)) {
-    await createNotification({
-      userId: cancelled.requesterId,
-      type: "cancelled",
-      title: "Booking cancelled",
-      message: `${cancelled.title} was cancelled by ${req.user.name}. Reason: ${reason}`,
-      bookingId: cancelled.id
-    });
-  }
-  res.json(cancelled);
 }));
 
 app.patch("/api/bookings/:id/status", requireManager, asyncRoute(async (req, res) => {
