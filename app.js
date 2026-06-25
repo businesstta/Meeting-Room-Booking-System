@@ -1473,9 +1473,10 @@ function alertDialog() {
   if (!state.alert) return "";
   const confirm = state.alert.confirmDelete;
   const cancel = state.alert.confirmCancel;
+  const tone = state.alert.tone || "";
   return `
     <div class="modal open alert-modal">
-      <div class="modal-panel alert-panel ${state.alert.tone === "danger" ? "danger" : ""}">
+      <div class="modal-panel alert-panel ${escapeHtml(tone)}">
         <div class="section-title">
           <h2>${escapeHtml(state.alert.title)}</h2>
           <button type="button" class="btn ghost" data-action="close-alert">Close</button>
@@ -1827,8 +1828,7 @@ function bindEvents() {
       await remove(button.dataset.confirmDelete, Number(button.dataset.id));
       state.alert = null;
       await loadData();
-      render();
-      notify("Deleted.");
+      showSuccess("Deleted successfully", "The selected record has been deleted.");
     });
   });
 
@@ -2176,8 +2176,7 @@ async function handleForm(event) {
     state.alert = null;
     state.modal = null;
     await loadData();
-    render();
-    return notify(t("bookingCancelled"));
+    return showSuccess(t("bookingCancelled"), "The booking has been cancelled successfully.");
   }
 
   if (type === "settings") {
@@ -2198,8 +2197,7 @@ async function handleForm(event) {
       body: JSON.stringify({ modulePermissions })
     });
     state.data.settings = settings;
-    render();
-    return notify("Settings saved.");
+    return showSuccess("Settings saved", "Module permissions have been updated successfully.");
   }
 
   if (type === "change-password") {
@@ -2207,8 +2205,7 @@ async function handleForm(event) {
       method: "POST",
       body: JSON.stringify({ oldPassword: values.oldPassword, newPassword: values.newPassword })
     });
-    render();
-    return notify("Password updated.");
+    return showSuccess("Password updated", "Your password has been changed successfully.");
   }
 
   if (type === "room") {
@@ -2267,8 +2264,24 @@ async function handleForm(event) {
   if (state.currentUser) {
     state.currentUser = byId(state.data.users, state.currentUser.id) || state.currentUser;
   }
+  showSuccess(editId ? "Updated successfully" : "Saved successfully", successMessageFor(type, editId));
+}
+
+function successMessageFor(type, editId = null) {
+  const action = editId ? "updated" : "saved";
+  const messages = {
+    booking: `Booking ${action} successfully.`,
+    room: `Room ${action} successfully.`,
+    user: `User ${action} successfully.`,
+    "assign-user": "User added to department successfully.",
+    department: `Department ${action} successfully.`
+  };
+  return messages[type] || `Record ${action} successfully.`;
+}
+
+function showSuccess(title, message) {
+  state.alert = { title, message, tone: "success" };
   render();
-  notify(editId ? "Updated successfully." : "Saved successfully.");
 }
 
 function findConflict(roomId, startTime, endTime, excludeId = null) {
@@ -2298,7 +2311,8 @@ function showAvailabilityResult(values) {
   if (conflict) return showConflict(conflict);
   state.alert = {
     title: "Room available",
-    message: "This room is available for the selected date and time."
+    message: "This room is available for the selected date and time.",
+    tone: "success"
   };
   render();
 }
@@ -2356,8 +2370,7 @@ async function updateBookingStatus(id, status) {
     body: JSON.stringify({ status })
   });
   await loadData();
-  render();
-  notify(`Booking ${status}.`);
+  showSuccess(`Booking ${status}`, `The booking has been ${status} successfully.`);
 }
 
 async function cancelBooking(id) {
