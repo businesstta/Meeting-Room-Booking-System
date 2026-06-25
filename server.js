@@ -32,9 +32,9 @@ const SESSION_SECRET = process.env.SESSION_SECRET || "change-this-secret-before-
 const SESSION_COOKIE = "atoz_session";
 const SESSION_HOURS = 8;
 const DEFAULT_MODULE_PERMISSIONS = {
-  administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "settings"],
-  manager: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "settings"],
-  user: ["dashboard", "bookings", "calendar", "notifications", "settings"]
+  administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "module-permissions", "change-password", "settings"],
+  manager: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "change-password", "settings"],
+  user: ["dashboard", "bookings", "calendar", "notifications", "change-password", "settings"]
 };
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL });

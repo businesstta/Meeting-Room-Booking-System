@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at);
 
 INSERT INTO app_settings (id, module_permissions) VALUES
-  (1, '{"administrator":["dashboard","bookings","calendar","notifications","rooms","users","departments","settings"],"manager":["dashboard","bookings","calendar","notifications","rooms","users","departments","settings"],"user":["dashboard","bookings","calendar","notifications","settings"]}'::jsonb)
+  (1, '{"administrator":["dashboard","bookings","calendar","notifications","rooms","users","departments","module-permissions","change-password","settings"],"manager":["dashboard","bookings","calendar","notifications","rooms","users","departments","change-password","settings"],"user":["dashboard","bookings","calendar","notifications","change-password","settings"]}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO departments (id, name, code) VALUES

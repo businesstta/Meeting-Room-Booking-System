@@ -230,6 +230,36 @@ button {
   gap: 8px;
 }
 
+.nav-group {
+  display: grid;
+  gap: 6px;
+}
+
+.nav-group-label {
+  min-height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.nav-submenu {
+  display: grid;
+  gap: 6px;
+  padding-left: 22px;
+}
+
+.nav-submenu button {
+  min-height: 38px;
+  grid-template-columns: 24px 1fr;
+  font-size: 13px;
+}
+
 .nav-collapse {
   min-height: 40px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -296,15 +326,21 @@ button {
 }
 
 .nav-collapsed .nav button,
-.nav-collapsed .nav-collapse {
+.nav-collapsed .nav-collapse,
+.nav-collapsed .nav-group-label {
   grid-template-columns: 1fr;
   justify-items: center;
   padding: 0;
 }
 
 .nav-collapsed .nav button strong,
-.nav-collapsed .nav-collapse span {
+.nav-collapsed .nav-collapse span,
+.nav-collapsed .nav-group-label strong {
   display: none;
+}
+
+.nav-collapsed .nav-submenu {
+  padding-left: 0;
 }
 
 .nav-collapsed .profile-card {

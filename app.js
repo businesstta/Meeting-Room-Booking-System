@@ -21,6 +21,8 @@ const i18n = {
     calendarSub: "See booked meeting rooms by date and time.",
     notificationsSub: "Meeting reminders and booking activity.",
     settingsSub: "Manage module access and your account password.",
+    modulePermissionsSub: "Control which roles can open each module.",
+    changePasswordSub: "Update your account password.",
     roomsSub: "Manage room capacity, floor, and equipment.",
     usersSub: "Create normal users by department and assign access roles.",
     departmentsSub: "Maintain the company department structure.",
@@ -237,6 +239,8 @@ const i18n = {
     adminOnly: "Administrator access လိုအပ်သည်။",
     settings: "Settings",
     settingsSub: "Module access နှင့် password ပြင်ရန်။",
+    modulePermissionsSub: "Role အလိုက် module access ကိုစီမံရန်။",
+    changePasswordSub: "သင့် account password ကိုပြင်ရန်။",
     modulePermissions: "Module permissions",
     changePassword: "Password ပြင်မည်",
     oldPassword: "Password အဟောင်း",
@@ -328,16 +332,22 @@ const state = {
   theme: localStorage.getItem("roombook-theme") || "light"
 };
 
-const navItems = [
+const mainNavItems = [
   { id: "dashboard", labelKey: "dashboard", icon: "dashboard" },
   { id: "bookings", labelKey: "bookings", icon: "bookings" },
   { id: "calendar", labelKey: "calendar", icon: "calendar" },
   { id: "notifications", labelKey: "notifications", icon: "bell" },
   { id: "rooms", labelKey: "rooms", icon: "rooms", managerOnly: true },
   { id: "users", labelKey: "users", icon: "users", managerOnly: true },
-  { id: "departments", labelKey: "departments", icon: "departments", managerOnly: true },
-  { id: "settings", labelKey: "settings", icon: "settings" }
+  { id: "departments", labelKey: "departments", icon: "departments", managerOnly: true }
 ];
+
+const settingsNavItems = [
+  { id: "module-permissions", labelKey: "modulePermissions", icon: "settings", adminOnly: true },
+  { id: "change-password", labelKey: "changePassword", icon: "settings", requiredForAll: true }
+];
+
+const navItems = [...mainNavItems, ...settingsNavItems];
 
 function t(key) {
   return i18n[state.language]?.[key] || i18n.en[key] || key;
@@ -496,18 +506,55 @@ function roleModulePermissions(role = state.currentUser?.role) {
   const defaults = {
     administrator: navItems.map((item) => item.id),
     manager: navItems.map((item) => item.id),
-    user: ["dashboard", "bookings", "calendar", "notifications", "settings"]
+    user: ["dashboard", "bookings", "calendar", "notifications", "change-password"]
   };
   return state.data.settings?.modulePermissions?.[role] || defaults[role] || defaults.user;
 }
 
 function canAccessModule(moduleId) {
   if (state.currentUser?.role === "administrator") return true;
+  if (moduleId === "module-permissions") return false;
+  if (moduleId === "change-password") {
+    const permissions = roleModulePermissions();
+    return permissions.includes("change-password") || permissions.includes("settings");
+  }
   return roleModulePermissions().includes(moduleId);
 }
 
 function visibleNavItems() {
-  return navItems.filter((item) => (!item.managerOnly || canManage()) && canAccessModule(item.id));
+  return navItems.filter((item) => canShowNavItem(item));
+}
+
+function canShowNavItem(item) {
+  if (item.adminOnly && state.currentUser?.role !== "administrator") return false;
+  if (item.managerOnly && !canManage()) return false;
+  return canAccessModule(item.id);
+}
+
+function navButton(item, notificationCount = 0) {
+  return `
+    <button class="${state.view === item.id ? "active" : ""}" data-view="${item.id}" title="${t(item.labelKey)}">
+      <span class="nav-icon">${icon(item.icon)}${item.id === "notifications" && notificationCount ? `<em>${notificationCount}</em>` : ""}</span>
+      <strong>${t(item.labelKey)}</strong>
+    </button>
+  `;
+}
+
+function settingsSubmenu(notificationCount = 0) {
+  const children = settingsNavItems.filter((item) => canShowNavItem(item));
+  if (!children.length) return "";
+  const active = children.some((item) => item.id === state.view);
+  return `
+    <div class="nav-group ${active ? "active" : ""}">
+      <div class="nav-group-label" title="${t("settings")}">
+        <span class="nav-icon">${icon("settings")}</span>
+        <strong>${t("settings")}</strong>
+      </div>
+      <div class="nav-submenu">
+        ${children.map((item) => navButton(item, notificationCount)).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function visibleBookings(bookings = state.data.bookings) {
@@ -544,6 +591,9 @@ function render() {
     bindEvents();
     return;
   }
+  if (state.view === "settings") {
+    state.view = state.currentUser.role === "administrator" ? "module-permissions" : "change-password";
+  }
   if (!visibleNavItems().some((item) => item.id === state.view)) {
     state.view = "dashboard";
   }
@@ -558,12 +608,8 @@ function render() {
           <span>${state.navCollapsed ? t("expandNav") : t("collapseNav")}</span>
         </button>
         <nav class="nav">
-          ${visibleNavItems().map((item) => `
-            <button class="${state.view === item.id ? "active" : ""}" data-view="${item.id}" title="${t(item.labelKey)}">
-              <span class="nav-icon">${icon(item.icon)}${item.id === "notifications" && notificationCount ? `<em>${notificationCount}</em>` : ""}</span>
-              <strong>${t(item.labelKey)}</strong>
-            </button>
-          `).join("")}
+          ${mainNavItems.filter((item) => canShowNavItem(item)).map((item) => navButton(item, notificationCount)).join("")}
+          ${settingsSubmenu(notificationCount)}
         </nav>
         <div class="profile">
           <div class="switch-panel">
@@ -649,7 +695,8 @@ function topbar() {
     rooms: [t("rooms"), t("roomsSub")],
     users: [t("users"), t("usersSub")],
     departments: [t("departments"), t("departmentsSub")],
-    settings: [t("settings"), t("settingsSub")]
+    "module-permissions": [t("modulePermissions"), t("modulePermissionsSub")],
+    "change-password": [t("changePassword"), t("changePasswordSub")]
   };
   const [title, subtitle] = labels[state.view];
   const action = {
@@ -660,7 +707,8 @@ function topbar() {
     rooms: `<button class="btn" data-modal="room">${t("newRoom")}</button>`,
     users: `<button class="btn" data-modal="user">${t("newUser")}</button>`,
     departments: `<button class="btn" data-modal="department">${t("newDepartment")}</button>`,
-    settings: ""
+    "module-permissions": "",
+    "change-password": ""
   }[state.view] || "";
 
   return `
@@ -833,11 +881,11 @@ const views = {
       </section>
     `;
   },
-  settings() {
+  "module-permissions"() {
     const modules = navItems.map((item) => item.id);
     const roles = ["administrator", "manager", "user"];
     return `
-      <section class="grid two">
+      <section>
         ${state.currentUser?.role === "administrator" ? `
           <form class="card" data-form="settings">
             <div class="section-title">
@@ -850,8 +898,10 @@ const views = {
               ${modules.map((moduleId) => `
                 <strong>${t(navItems.find((item) => item.id === moduleId)?.labelKey || moduleId)}</strong>
                 ${roles.map((role) => {
-                  const checked = roleModulePermissions(role).includes(moduleId);
-                  const disabled = role === "administrator" || moduleId === "settings";
+                  const requiredForAll = moduleId === "change-password";
+                  const adminOnly = moduleId === "module-permissions";
+                  const checked = role === "administrator" || requiredForAll || roleModulePermissions(role).includes(moduleId);
+                  const disabled = role === "administrator" || requiredForAll || adminOnly;
                   return `
                     <label class="permission-check">
                       <input type="checkbox" name="${role}:${moduleId}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
@@ -862,7 +912,13 @@ const views = {
             </div>
             <button class="btn" type="submit">${t("saveSettings")}</button>
           </form>
-        ` : ""}
+        ` : `<div class="empty">${t("adminOnly")}</div>`}
+      </section>
+    `;
+  },
+  "change-password"() {
+    return `
+      <section>
         <form class="card" data-form="change-password">
           <div class="section-title">
             <h2>${t("changePassword")}</h2>
@@ -2053,12 +2109,15 @@ async function handleForm(event) {
   if (type === "settings") {
     const modulePermissions = {};
     ["administrator", "manager", "user"].forEach((role) => {
-      modulePermissions[role] = role === "administrator" ? navItems.map((item) => item.id) : ["settings"];
+      modulePermissions[role] = role === "administrator" ? [...navItems.map((item) => item.id), "settings"] : ["change-password", "settings"];
       navItems.forEach((item) => {
         if (values[`${role}:${item.id}`] === "on" && !modulePermissions[role].includes(item.id)) {
           modulePermissions[role].push(item.id);
         }
       });
+      if (role !== "administrator") {
+        modulePermissions[role] = modulePermissions[role].filter((id) => id !== "module-permissions");
+      }
     });
     const settings = await apiFetch("/api/settings", {
       method: "PUT",
