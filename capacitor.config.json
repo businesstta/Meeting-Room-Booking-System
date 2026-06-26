@@ -1,0 +1,9 @@
+{
+  "appId": "com.atozgroup.roompanel",
+  "appName": "AtoZ Room Panel",
+  "webDir": "mobile-www",
+  "server": {
+    "url": "http://192.168.11.79:5173/?roomDisplay=1",
+    "cleartext": true
+  }
+}

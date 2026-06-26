@@ -9,6 +9,7 @@ Company meeting room booking system with a responsive PWA interface, PostgreSQL 
 - Database: PostgreSQL
 - Email: Nodemailer SMTP integration
 - PWA: Web App Manifest + Service Worker cache
+- Android Room Panel APK wrapper: Capacitor
 - Auth: Server-side sessions with HttpOnly cookies
 - Passwords: PBKDF2 hashed passwords
 
@@ -30,6 +31,7 @@ Company meeting room booking system with a responsive PWA interface, PostgreSQL 
 - Room Display panel for tablets outside meeting rooms
 - Administrator-only access to Room Display login
 - Room Display shows busy/free state by room and day schedule
+- Android Room Panel wrapper that opens Room Display mode directly
 - Departments, users, and rooms CRUD with delete confirmations
 - Department page can assign existing users instead of recreating users
 - Module Permissions settings for role-based menu/module access
@@ -105,6 +107,48 @@ Open the app:
 
 ```text
 http://localhost:5173
+```
+
+## Android Room Panel APK
+
+The Android wrapper is prepared with Capacitor for tablets mounted outside meeting rooms.
+
+The wrapper opens Room Display mode directly:
+
+```text
+http://192.168.11.79:5173/?roomDisplay=1
+```
+
+Before building or installing the APK:
+
+1. Keep the meeting room server running with `npm start`.
+2. Make sure the tablet and the server PC are on the same network.
+3. Allow Windows Firewall inbound access to port `5173`.
+4. If the server IP changes, update `server.url` in `capacitor.config.json`, then run `npm run cap:sync`.
+
+Install Android build tools on the build PC:
+
+```powershell
+choco install temurin17 androidstudio -y
+```
+
+Then restart PowerShell and build the debug APK:
+
+```powershell
+npm run cap:sync
+npm run android:build:debug
+```
+
+The debug APK will be created at:
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+For production, build a signed release APK or AAB from Android Studio:
+
+```powershell
+npm run android:open
 ```
 
 ## Email Notification Setup

@@ -2502,11 +2502,21 @@ function stopNotificationPolling() {
 }
 
 async function init() {
+  const launchParams = new URLSearchParams(window.location.search);
+  const roomDisplayLaunch = launchParams.get("roomDisplay") === "1" || launchParams.get("roomPanel") === "1";
   const { user } = await apiFetch("/api/me");
   state.currentUser = user;
   if (state.currentUser) {
     await loadData();
     startNotificationPolling();
+    if (roomDisplayLaunch && state.currentUser.role === "administrator") {
+      await loadRoomPanelData();
+      state.roomPanel.login = false;
+      state.roomPanel.active = true;
+    }
+  } else if (roomDisplayLaunch) {
+    state.roomPanel.login = true;
+    state.roomPanel.active = false;
   }
   render();
   if ("serviceWorker" in navigator) {

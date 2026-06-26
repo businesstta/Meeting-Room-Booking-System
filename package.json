@@ -6,9 +6,15 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "db:setup": "psql -U postgres -d meeting_room_booking -f database/postgres.sql"
+    "db:setup": "psql -U postgres -d meeting_room_booking -f database/postgres.sql",
+    "cap:sync": "npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:build:debug": "cmd /c \"cd android && gradlew.bat assembleDebug\""
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "express": "^4.19.2",
     "nodemailer": "^9.0.1",
     "pg": "^8.12.0"
