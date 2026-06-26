@@ -1,4 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
+const APP_VERSION = "38";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -1579,12 +1580,13 @@ function alertDialog() {
   if (!state.alert) return "";
   const confirm = state.alert.confirmDelete;
   const cancel = state.alert.confirmCancel;
+  const update = state.alert.updateAvailable;
   const tone = state.alert.tone || "";
   return `
     <div class="modal open alert-modal">
       <div class="modal-panel alert-panel ${escapeHtml(tone)}">
         <div class="section-title">
-          <h2>${escapeHtml(state.alert.title)}</h2>
+          <h2>${escapeHtml(state.alert.title || "Notice")}</h2>
           <button type="button" class="btn ghost" data-action="close-alert">Close</button>
         </div>
         <p>${escapeHtml(state.alert.message)}</p>
@@ -1606,6 +1608,11 @@ function alertDialog() {
               <button type="submit" class="btn danger">${t("confirmCancel")}</button>
             </div>
           </form>
+        ` : update ? `
+          <div class="actions confirm-actions">
+            <button type="button" class="btn ghost" data-action="close-alert">Later</button>
+            <button type="button" class="btn" data-action="refresh-app">Refresh</button>
+          </div>
         ` : `<button type="button" class="btn full" data-action="close-alert">OK</button>`}
       </div>
     </div>
@@ -2577,12 +2584,17 @@ function deleteConfirmation(kind, storeName, id) {
 
 let installPrompt = null;
 let notificationTimer = null;
+let updateTimer = null;
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   installPrompt = event;
 });
 
 document.addEventListener("click", async (event) => {
+  if (event.target.matches("[data-action='refresh-app']")) {
+    await refreshApp();
+    return;
+  }
   if (event.target.matches("[data-action='logout']")) {
     await apiFetch("/api/logout", { method: "POST" }).catch(() => {});
     stopNotificationPolling();
@@ -2608,6 +2620,37 @@ function notify(message) {
   window.setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
+async function checkForAppUpdate() {
+  try {
+    const response = await fetch(`/version.json?ts=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const payload = await response.json();
+    if (payload.version && String(payload.version) !== APP_VERSION && !state.alert?.updateAvailable) {
+      state.alert = {
+        title: "Update available",
+        message: "A new version is ready. Refresh to load the latest changes.",
+        tone: "success",
+        updateAvailable: true
+      };
+      render();
+    }
+  } catch {
+    // Version checks are best-effort so the app keeps working offline or during server restarts.
+  }
+}
+
+async function refreshApp() {
+  if ("serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+  }
+  if ("caches" in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((key) => caches.delete(key)));
+  }
+  window.location.reload();
+}
+
 async function refreshNotifications({ rerender = false } = {}) {
   if (!state.currentUser) return;
   const before = unreadNotifications().length;
@@ -2631,6 +2674,14 @@ function stopNotificationPolling() {
   notificationTimer = null;
 }
 
+function startUpdatePolling() {
+  if (updateTimer) window.clearInterval(updateTimer);
+  checkForAppUpdate();
+  updateTimer = window.setInterval(() => {
+    checkForAppUpdate();
+  }, 60000);
+}
+
 async function init() {
   const launchParams = new URLSearchParams(window.location.search);
   const pathLaunch = window.location.pathname.replace(/\/+$/, "").endsWith("/room-display");
@@ -2650,6 +2701,7 @@ async function init() {
     state.roomPanel.active = false;
   }
   render();
+  startUpdatePolling();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }

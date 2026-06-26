@@ -1692,6 +1692,10 @@ body[data-theme="dark"] .alert-panel.success h2 {
     grid-template-columns: 236px minmax(0, 1fr);
   }
 
+  .shell.nav-collapsed {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
   .main {
     padding: 18px;
   }
@@ -1716,6 +1720,21 @@ body[data-theme="dark"] .alert-panel.success h2 {
     min-height: 40px;
     gap: 8px;
     padding: 0 10px;
+  }
+
+  .nav-collapsed .nav button,
+  .nav-collapsed .nav-collapse,
+  .nav-collapsed .nav-group-label {
+    padding: 0;
+  }
+
+  .nav-collapsed .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .nav-collapsed .sidebar {
+    padding-inline: 10px;
   }
 
   .segmented button {
@@ -1747,6 +1766,10 @@ body[data-theme="dark"] .alert-panel.success h2 {
 @media (min-width: 761px) and (max-width: 900px) {
   .shell:not(.nav-collapsed) {
     grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .shell.nav-collapsed {
+    grid-template-columns: 72px minmax(0, 1fr);
   }
 
   .topbar {
