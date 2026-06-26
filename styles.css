@@ -1840,7 +1840,19 @@ body[data-theme="dark"] .alert-panel.success h2 {
   }
 
   .shell.nav-collapsed {
-    grid-template-columns: 1fr;
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .shell.nav-collapsed .sidebar {
+    position: sticky;
+    width: auto;
+    min-width: 0;
+    transform: none;
+    padding-inline: 10px;
+  }
+
+  .shell.nav-collapsed .main {
+    grid-column: 2;
   }
 
   .display-page {

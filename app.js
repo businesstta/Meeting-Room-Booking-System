@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "38";
+const APP_VERSION = "39";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
