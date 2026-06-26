@@ -27,6 +27,7 @@ Company meeting room booking system with a responsive PWA interface, PostgreSQL 
 - Required cancellation reason with confirmation popup
 - Cancellation notification sent to the original requester
 - Notification page with unread count, read status, and mark all as read
+- Opening one notification marks that notification as read and updates the unread badge
 - Faster notification refresh through lightweight polling
 - Room Display panel for tablets outside meeting rooms
 - Administrator-only access to Room Display login
@@ -35,6 +36,7 @@ Company meeting room booking system with a responsive PWA interface, PostgreSQL 
 - Departments, users, and rooms CRUD with delete confirmations
 - Department page can assign existing users instead of recreating users
 - Module Permissions settings for role-based menu/module access
+- Role Setup page for administrator-created custom roles
 - Change Password page for all roles
 - Language switch: English / Burmese
 - Theme switch: Light / Dark navy mode
@@ -53,6 +55,12 @@ Module visibility can be changed by an administrator from:
 
 ```text
 Settings > Module Permissions
+```
+
+Custom roles can be created by an administrator from:
+
+```text
+Settings > Role Setup
 ```
 
 Password change is available from:
@@ -116,7 +124,7 @@ The Android wrapper is prepared with Capacitor for tablets mounted outside meeti
 The wrapper opens Room Display mode directly:
 
 ```text
-http://192.168.11.79:5173/?roomDisplay=1
+http://192.168.11.79:5173/room-display
 ```
 
 Before building or installing the APK:
@@ -125,6 +133,7 @@ Before building or installing the APK:
 2. Make sure the tablet and the server PC are on the same network.
 3. Allow Windows Firewall inbound access to port `5173`.
 4. If the server IP changes, update `server.url` in `capacitor.config.json`, then run `npm run cap:sync`.
+5. Android cleartext traffic is enabled for the local room-panel URL through `android/app/src/main/res/xml/network_security_config.xml`.
 
 Install Android build tools on the build PC:
 

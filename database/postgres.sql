@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL UNIQUE,
   password TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('administrator', 'manager', 'user')),
+  role TEXT NOT NULL,
   department_id INTEGER REFERENCES departments(id) ON DELETE SET NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -70,14 +70,15 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS app_settings (
   id INTEGER PRIMARY KEY DEFAULT 1,
   module_permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  custom_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (id = 1)
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at);
 
-INSERT INTO app_settings (id, module_permissions) VALUES
-  (1, '{"administrator":["dashboard","bookings","calendar","notifications","rooms","users","departments","module-permissions","change-password","settings"],"manager":["dashboard","bookings","calendar","notifications","rooms","users","departments","change-password","settings"],"user":["dashboard","bookings","calendar","notifications","change-password","settings"]}'::jsonb)
+INSERT INTO app_settings (id, module_permissions, custom_roles) VALUES
+  (1, '{"administrator":["dashboard","bookings","calendar","notifications","rooms","users","departments","module-permissions","role-setup","change-password","settings"],"manager":["dashboard","bookings","calendar","notifications","rooms","users","departments","change-password","settings"],"user":["dashboard","bookings","calendar","notifications","change-password","settings"]}'::jsonb, '[]'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO departments (id, name, code) VALUES

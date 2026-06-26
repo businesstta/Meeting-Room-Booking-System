@@ -22,6 +22,7 @@ const i18n = {
     notificationsSub: "Meeting reminders and booking activity.",
     settingsSub: "Manage module access and your account password.",
     modulePermissionsSub: "Control which roles can open each module.",
+    roleSetupSub: "Create custom access roles for future users.",
     changePasswordSub: "Update your account password.",
     roomsSub: "Manage room capacity, floor, and equipment.",
     usersSub: "Create normal users by department and assign access roles.",
@@ -116,6 +117,13 @@ const i18n = {
     roomDisplayLoginHelp: "Administrator login is required to open the tablet room display.",
     adminOnly: "Administrator access is required.",
     modulePermissions: "Module permissions",
+    roleSetup: "Role Setup",
+    roleName: "Role name",
+    addRole: "Add role",
+    existingRoles: "Existing roles",
+    coreRole: "Core role",
+    customRole: "Custom role",
+    deleteRole: "Delete role",
     changePassword: "Change password",
     oldPassword: "Old password",
     newPassword: "New password",
@@ -240,8 +248,16 @@ const i18n = {
     settings: "Settings",
     settingsSub: "Module access နှင့် password ပြင်ရန်။",
     modulePermissionsSub: "Role အလိုက် module access ကိုစီမံရန်။",
+    roleSetupSub: "အသုံးပြုသူအသစ်များအတွက် role အသစ်များဖန်တီးရန်။",
     changePasswordSub: "သင့် account password ကိုပြင်ရန်။",
     modulePermissions: "Module permissions",
+    roleSetup: "Role Setup",
+    roleName: "Role အမည်",
+    addRole: "Role ထည့်မည်",
+    existingRoles: "ရှိပြီးသား Role များ",
+    coreRole: "Core role",
+    customRole: "Custom role",
+    deleteRole: "Role ဖျက်မည်",
     changePassword: "Password ပြင်မည်",
     oldPassword: "Password အဟောင်း",
     newPassword: "Password အသစ်",
@@ -308,7 +324,7 @@ const state = {
   alert: null,
   currentUser: null,
   bookingDraft: null,
-  data: { departments: [], users: [], rooms: [], bookings: [], notifications: [], settings: { modulePermissions: {} } },
+  data: { departments: [], users: [], rooms: [], bookings: [], notifications: [], settings: { modulePermissions: {}, roles: ["administrator", "manager", "user"], coreRoles: ["administrator", "manager", "user"] } },
   filters: {
     date: "",
     departmentId: "all",
@@ -345,6 +361,7 @@ const mainNavItems = [
 
 const settingsNavItems = [
   { id: "module-permissions", labelKey: "modulePermissions", icon: "settings", adminOnly: true },
+  { id: "role-setup", labelKey: "roleSetup", icon: "users", adminOnly: true },
   { id: "change-password", labelKey: "changePassword", icon: "settings", requiredForAll: true }
 ];
 
@@ -505,18 +522,36 @@ function canCancelBooking(booking) {
   return state.currentUser?.role === "manager" && isAdminDepartmentUser();
 }
 
+function availableRoles() {
+  const roles = state.data.settings?.roles;
+  return Array.isArray(roles) && roles.length ? roles : ["administrator", "manager", "user"];
+}
+
+function coreRoles() {
+  const roles = state.data.settings?.coreRoles;
+  return Array.isArray(roles) && roles.length ? roles : ["administrator", "manager", "user"];
+}
+
+function defaultModulesForRole(role) {
+  if (role === "administrator") {
+    return [...navItems.map((item) => item.id), "settings"];
+  }
+  if (role === "manager") {
+    return navItems
+      .map((item) => item.id)
+      .filter((id) => !["module-permissions", "role-setup"].includes(id))
+      .concat("settings");
+  }
+  return ["dashboard", "bookings", "calendar", "notifications", "change-password", "settings"];
+}
+
 function roleModulePermissions(role = state.currentUser?.role) {
-  const defaults = {
-    administrator: navItems.map((item) => item.id),
-    manager: navItems.map((item) => item.id),
-    user: ["dashboard", "bookings", "calendar", "notifications", "change-password"]
-  };
-  return state.data.settings?.modulePermissions?.[role] || defaults[role] || defaults.user;
+  return state.data.settings?.modulePermissions?.[role] || defaultModulesForRole(role);
 }
 
 function canAccessModule(moduleId) {
   if (state.currentUser?.role === "administrator") return true;
-  if (moduleId === "module-permissions") return false;
+  if (["module-permissions", "role-setup"].includes(moduleId)) return false;
   if (moduleId === "change-password") {
     const permissions = roleModulePermissions();
     return permissions.includes("change-password") || permissions.includes("settings");
@@ -700,6 +735,7 @@ function topbar() {
     users: [t("users"), t("usersSub")],
     departments: [t("departments"), t("departmentsSub")],
     "module-permissions": [t("modulePermissions"), t("modulePermissionsSub")],
+    "role-setup": [t("roleSetup"), t("roleSetupSub")],
     "change-password": [t("changePassword"), t("changePasswordSub")]
   };
   const [title, subtitle] = labels[state.view];
@@ -712,6 +748,7 @@ function topbar() {
     users: `<button class="btn" data-modal="user">${t("newUser")}</button>`,
     departments: `<button class="btn" data-modal="department">${t("newDepartment")}</button>`,
     "module-permissions": "",
+    "role-setup": "",
     "change-password": ""
   }[state.view] || "";
 
@@ -887,7 +924,7 @@ const views = {
   },
   "module-permissions"() {
     const modules = navItems.map((item) => item.id);
-    const roles = ["administrator", "manager", "user"];
+    const roles = availableRoles();
     return `
       <section>
         ${state.currentUser?.role === "administrator" ? `
@@ -896,16 +933,16 @@ const views = {
               <h2>${t("modulePermissions")}</h2>
               <span class="status">${t("adminOnly")}</span>
             </div>
-            <div class="permission-grid">
+            <div class="permission-grid" style="--role-count:${roles.length}">
               <div></div>
               ${roles.map((role) => `<strong>${role}</strong>`).join("")}
               ${modules.map((moduleId) => `
                 <strong>${t(navItems.find((item) => item.id === moduleId)?.labelKey || moduleId)}</strong>
                 ${roles.map((role) => {
                   const requiredForAll = moduleId === "change-password";
-                  const adminOnly = moduleId === "module-permissions";
+                  const adminOnly = ["module-permissions", "role-setup"].includes(moduleId);
                   const checked = role === "administrator" || requiredForAll || roleModulePermissions(role).includes(moduleId);
-                  const disabled = role === "administrator" || requiredForAll || adminOnly;
+                  const disabled = role === "administrator" || requiredForAll || (adminOnly && role !== "administrator");
                   return `
                     <label class="permission-check">
                       <input type="checkbox" name="${role}:${moduleId}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}>
@@ -916,6 +953,46 @@ const views = {
             </div>
             <button class="btn" type="submit">${t("saveSettings")}</button>
           </form>
+        ` : `<div class="empty">${t("adminOnly")}</div>`}
+      </section>
+    `;
+  },
+  "role-setup"() {
+    const roles = availableRoles();
+    const fixedRoles = coreRoles();
+    return `
+      <section class="grid two">
+        ${state.currentUser?.role === "administrator" ? `
+          <form class="card" data-form="role-setup">
+            <div class="section-title">
+              <h2>${t("roleSetup")}</h2>
+              <span class="status">${t("adminOnly")}</span>
+            </div>
+            <div class="form-grid">
+              ${input(t("roleName"), "roleName", "text", "supervisor")}
+            </div>
+            <br>
+            <button class="btn" type="submit">${t("addRole")}</button>
+          </form>
+          <div class="card">
+            <div class="section-title">
+              <h2>${t("existingRoles")}</h2>
+            </div>
+            <div class="role-list">
+              ${roles.map((role) => {
+                const isCore = fixedRoles.includes(role);
+                return `
+                  <div class="role-row">
+                    <div>
+                      <strong>${escapeHtml(role)}</strong>
+                      <span>${isCore ? t("coreRole") : t("customRole")}</span>
+                    </div>
+                    <button class="btn ghost compact" type="button" data-delete-role="${escapeHtml(role)}" ${isCore ? "disabled" : ""}>${t("deleteRole")}</button>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
         ` : `<div class="empty">${t("adminOnly")}</div>`}
       </section>
     `;
@@ -1694,7 +1771,7 @@ function userForm() {
         ${input("Name", "name", "text", user?.name || "New User")}
         ${input("Username", "username", "text", user?.username || "newuser")}
         ${input("Email", "email", "email", user?.email || "user@company.test")}
-        ${input("Password", "password", "text", user ? "" : "user123", user ? false : true)}
+        ${input("Password", "password", "password", user ? "" : "user123", user ? false : true)}
         <div class="field">
           <label>Role</label>
           <select name="role">
@@ -1770,7 +1847,7 @@ function departmentForm() {
 }
 
 function roleOptions(selectedRole) {
-  return ["user", "manager", "administrator"]
+  return availableRoles()
     .map((role) => `<option value="${role}"${selectedRole === role ? " selected" : ""}>${role === "user" ? "normal user" : role}</option>`)
     .join("");
 }
@@ -1927,17 +2004,21 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-notification]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      markNotificationRead(button.dataset.notification);
-      if (!String(button.dataset.notification).startsWith("reminder-")) {
-        try {
-          await apiFetch(`/api/notifications/${button.dataset.notification}/read`, { method: "POST" });
-        } catch (error) {
-          // Local read state still keeps the badge responsive if the item was already removed.
-        }
-      }
-      state.modal = { type: "notification-detail", id: button.dataset.notification };
+    button.addEventListener("click", () => {
+      const notificationId = button.dataset.notification;
+      markNotificationRead(notificationId);
+      state.modal = { type: "notification-detail", id: notificationId };
       render();
+      if (!String(notificationId).startsWith("reminder-")) {
+        apiFetch(`/api/notifications/${notificationId}/read`, { method: "POST" })
+          .then((updated) => {
+            state.data.notifications = state.data.notifications.map((item) => Number(item.id) === Number(updated.id) ? updated : item);
+            if (state.view === "notifications") render();
+          })
+          .catch(() => {
+            // Local read state still keeps the badge responsive if the item was already removed.
+          });
+      }
     });
   });
 
@@ -1950,6 +2031,30 @@ function bindEvents() {
         // Keep the UI readable even if an old local reminder is the only unread item.
       }
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-delete-role]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const role = button.dataset.deleteRole;
+      if (coreRoles().includes(role)) {
+        state.alert = { message: "Core roles cannot be deleted.", tone: "danger" };
+        return render();
+      }
+      if (state.data.users.some((user) => user.role === role)) {
+        state.alert = { message: "This role is used by existing users. Move those users to another role first.", tone: "danger" };
+        return render();
+      }
+      const roles = availableRoles().filter((item) => item !== role);
+      const modulePermissions = { ...(state.data.settings?.modulePermissions || {}) };
+      delete modulePermissions[role];
+      const settings = await apiFetch("/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({ roles, modulePermissions })
+      });
+      state.data.settings = settings;
+      state.alert = null;
+      showSuccess("Role deleted", "The selected role has been deleted.");
     });
   });
 
@@ -2210,7 +2315,7 @@ async function handleForm(event) {
 
   if (type === "settings") {
     const modulePermissions = {};
-    ["administrator", "manager", "user"].forEach((role) => {
+    availableRoles().forEach((role) => {
       modulePermissions[role] = role === "administrator" ? [...navItems.map((item) => item.id), "settings"] : ["change-password", "settings"];
       navItems.forEach((item) => {
         if (values[`${role}:${item.id}`] === "on" && !modulePermissions[role].includes(item.id)) {
@@ -2218,15 +2323,40 @@ async function handleForm(event) {
         }
       });
       if (role !== "administrator") {
-        modulePermissions[role] = modulePermissions[role].filter((id) => id !== "module-permissions");
+        modulePermissions[role] = modulePermissions[role].filter((id) => !["module-permissions", "role-setup"].includes(id));
       }
     });
     const settings = await apiFetch("/api/settings", {
       method: "PUT",
-      body: JSON.stringify({ modulePermissions })
+      body: JSON.stringify({ modulePermissions, roles: availableRoles() })
     });
     state.data.settings = settings;
     return showSuccess("Settings saved", "Module permissions have been updated successfully.");
+  }
+
+  if (type === "role-setup") {
+    const roleName = String(values.roleName || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-");
+    if (!/^[a-z][a-z0-9_-]{1,30}$/.test(roleName)) {
+      state.alert = { message: "Role name must start with a letter and use letters, numbers, dash, or underscore.", tone: "danger" };
+      return render();
+    }
+    if (availableRoles().includes(roleName)) {
+      state.alert = { message: "This role already exists.", tone: "danger" };
+      return render();
+    }
+    const roles = [...availableRoles(), roleName];
+    const modulePermissions = { ...(state.data.settings?.modulePermissions || {}) };
+    modulePermissions[roleName] = defaultModulesForRole(roleName);
+    const settings = await apiFetch("/api/settings", {
+      method: "PUT",
+      body: JSON.stringify({ roles, modulePermissions })
+    });
+    state.data.settings = settings;
+    state.alert = null;
+    return showSuccess("Role saved", "The new role has been added successfully.");
   }
 
   if (type === "change-password") {
@@ -2503,7 +2633,8 @@ function stopNotificationPolling() {
 
 async function init() {
   const launchParams = new URLSearchParams(window.location.search);
-  const roomDisplayLaunch = launchParams.get("roomDisplay") === "1" || launchParams.get("roomPanel") === "1";
+  const pathLaunch = window.location.pathname.replace(/\/+$/, "").endsWith("/room-display");
+  const roomDisplayLaunch = pathLaunch || launchParams.get("roomDisplay") === "1" || launchParams.get("roomPanel") === "1";
   const { user } = await apiFetch("/api/me");
   state.currentUser = user;
   if (state.currentUser) {

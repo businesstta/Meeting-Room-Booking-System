@@ -40,10 +40,11 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_SECURE = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
 const MAIL_FROM = process.env.MAIL_FROM || process.env.SMTP_USER || "";
 const DEFAULT_MODULE_PERMISSIONS = {
-  administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "module-permissions", "change-password", "settings"],
+  administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "module-permissions", "role-setup", "change-password", "settings"],
   manager: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "change-password", "settings"],
   user: ["dashboard", "bookings", "calendar", "notifications", "change-password", "settings"]
 };
+const CORE_ROLES = ["administrator", "manager", "user"];
 const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
@@ -249,12 +250,21 @@ function queueMailToUser(userId, subject, message) {
 }
 
 function settingsRow(row) {
+  const customRoles = Array.isArray(row?.custom_roles) ? row.custom_roles : [];
+  const roles = [...new Set([...CORE_ROLES, ...customRoles.map((role) => String(role).trim().toLowerCase()).filter(Boolean)])];
+  const modulePermissions = { ...DEFAULT_MODULE_PERMISSIONS, ...(row?.module_permissions || {}) };
+  roles.forEach((role) => {
+    if (!modulePermissions[role]) modulePermissions[role] = ["dashboard", "bookings", "calendar", "notifications", "change-password", "settings"];
+  });
   return {
-    modulePermissions: row?.module_permissions || DEFAULT_MODULE_PERMISSIONS
+    modulePermissions,
+    roles,
+    coreRoles: CORE_ROLES
   };
 }
 
 async function migrateSecurity() {
+  await pool.query("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_by INTEGER REFERENCES users(id) ON DELETE SET NULL");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP");
@@ -283,12 +293,14 @@ async function migrateSecurity() {
     CREATE TABLE IF NOT EXISTS app_settings (
       id INTEGER PRIMARY KEY DEFAULT 1,
       module_permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
+      custom_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CHECK (id = 1)
     )
   `);
+  await pool.query("ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS custom_roles JSONB NOT NULL DEFAULT '[]'::jsonb");
   await pool.query(
-    "INSERT INTO app_settings (id, module_permissions) VALUES (1, $1::jsonb) ON CONFLICT (id) DO NOTHING",
+    "INSERT INTO app_settings (id, module_permissions, custom_roles) VALUES (1, $1::jsonb, '[]'::jsonb) ON CONFLICT (id) DO NOTHING",
     [JSON.stringify(DEFAULT_MODULE_PERMISSIONS)]
   );
   await pool.query("DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP");
@@ -307,7 +319,7 @@ async function allData(user) {
     pool.query("SELECT * FROM rooms ORDER BY id"),
     pool.query("SELECT * FROM bookings ORDER BY start_time, id"),
     pool.query("SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 100", [user.id]),
-    pool.query("SELECT module_permissions FROM app_settings WHERE id = 1")
+    pool.query("SELECT module_permissions, custom_roles FROM app_settings WHERE id = 1")
   ]);
   return {
     departments: departments.rows.map(departmentRow),
@@ -481,18 +493,27 @@ app.get("/api/data", asyncRoute(async (req, res) => {
 }));
 
 app.get("/api/settings", asyncRoute(async (_req, res) => {
-  const result = await pool.query("SELECT module_permissions FROM app_settings WHERE id = 1");
+  const result = await pool.query("SELECT module_permissions, custom_roles FROM app_settings WHERE id = 1");
   res.json(settingsRow(result.rows[0]));
 }));
 
 app.put("/api/settings", requireAdmin, asyncRoute(async (req, res) => {
-  const modulePermissions = req.body.modulePermissions || DEFAULT_MODULE_PERMISSIONS;
+  const requestedRoles = Array.isArray(req.body.roles) ? req.body.roles : CORE_ROLES;
+  const roles = [...new Set([...CORE_ROLES, ...requestedRoles.map((role) => String(role).trim().toLowerCase()).filter(Boolean)])];
+  const customRoles = roles.filter((role) => !CORE_ROLES.includes(role));
+  const modulePermissions = { ...DEFAULT_MODULE_PERMISSIONS, ...(req.body.modulePermissions || {}) };
+  roles.forEach((role) => {
+    if (!modulePermissions[role]) modulePermissions[role] = ["dashboard", "bookings", "calendar", "notifications", "change-password", "settings"];
+  });
+  Object.keys(modulePermissions).forEach((role) => {
+    if (!roles.includes(role)) delete modulePermissions[role];
+  });
   const result = await pool.query(
     `UPDATE app_settings
-        SET module_permissions = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+        SET module_permissions = $1::jsonb, custom_roles = $2::jsonb, updated_at = CURRENT_TIMESTAMP
       WHERE id = 1
-      RETURNING module_permissions`,
-    [JSON.stringify(modulePermissions)]
+      RETURNING module_permissions, custom_roles`,
+    [JSON.stringify(modulePermissions), JSON.stringify(customRoles)]
   );
   res.json(settingsRow(result.rows[0]));
 }));
