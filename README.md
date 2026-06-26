@@ -139,6 +139,12 @@ npm run cap:sync
 npm run android:build:debug
 ```
 
+On this Windows development machine, the build script uses Android Studio's bundled JDK:
+
+```text
+C:\Program Files\Android\Android Studio\jbr
+```
+
 The debug APK will be created at:
 
 ```text
