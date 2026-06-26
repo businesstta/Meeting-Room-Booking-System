@@ -1281,9 +1281,10 @@ function roomDisplayScreen() {
   const roomId = state.roomPanel.roomId || data.rooms[0]?.id || "";
   const room = data.rooms.find((item) => Number(item.id) === Number(roomId)) || data.rooms[0];
   const bookings = data.bookings
-    .filter((booking) => Number(booking.roomId) === Number(room?.id))
+    .filter((booking) => isRoomPanelBooking(booking, room))
     .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
   const active = currentRoomBooking(bookings);
+  const nextBooking = bookings.find((booking) => new Date(booking.startTime) > new Date());
   return `
     <main class="display-page">
       <section class="display-shell">
@@ -1305,7 +1306,7 @@ function roomDisplayScreen() {
         <div class="display-status ${active ? "busy" : "free"}">
           <span>${t("now")}</span>
           <strong>${active ? t("busyNow") : t("freeNow")}</strong>
-          <p>${active ? `${timeOnly(active.startTime)} - ${timeOnly(active.endTime)} · ${escapeHtml(active.title)}` : t("noMeetingsToday")}</p>
+          <p>${roomPanelStatusLine(active, nextBooking, bookings.length)}</p>
         </div>
         <div class="display-grid">
           <section class="card">
@@ -1322,9 +1323,26 @@ function roomDisplayScreen() {
   `;
 }
 
+function isRoomPanelBooking(booking, room) {
+  return Number(booking.roomId) === Number(room?.id)
+    && booking.status !== "cancelled"
+    && sameDateKey(booking.startTime, localDate());
+}
+
+function sameDateKey(value, dateKey) {
+  return toDateKey(new Date(value)) === dateKey;
+}
+
 function currentRoomBooking(bookings) {
   const now = new Date();
   return bookings.find((booking) => new Date(booking.startTime) <= now && new Date(booking.endTime) > now);
+}
+
+function roomPanelStatusLine(active, nextBooking, bookingCount) {
+  if (active) return `${timeOnly(active.startTime)} - ${timeOnly(active.endTime)} · ${escapeHtml(active.title)}`;
+  if (nextBooking) return `Next: ${timeOnly(nextBooking.startTime)} - ${timeOnly(nextBooking.endTime)} · ${escapeHtml(nextBooking.title)}`;
+  if (bookingCount) return "No active meeting now.";
+  return t("noMeetingsToday");
 }
 
 function roomPanelBooking(booking, data) {
@@ -1340,20 +1358,27 @@ function roomPanelBooking(booking, data) {
 }
 
 function roomPanelTimeline(bookings) {
-  return Array.from({ length: 11 }, (_, index) => {
-    const hour = index + 8;
+  return Array.from({ length: 21 }, (_, index) => {
+    const minutes = (8 * 60) + (index * 30);
+    const hour = Math.floor(minutes / 60);
+    const minute = minutes % 60;
     const dateKey = localDate();
-    const slotStart = new Date(`${dateKey}T${String(hour).padStart(2, "0")}:00`);
+    const timeLabel = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    const slotStart = new Date(`${dateKey}T${timeLabel}`);
     const slotEnd = new Date(slotStart);
-    slotEnd.setHours(slotStart.getHours() + 1);
-    const busy = bookings.find((booking) => new Date(booking.startTime) < slotEnd && new Date(booking.endTime) > slotStart);
+    slotEnd.setMinutes(slotStart.getMinutes() + 30);
+    const busy = bookings.find((booking) => bookingOverlapsSlot(booking, slotStart, slotEnd));
     return `
       <div class="display-slot ${busy ? "busy" : "free"}">
-        <strong>${String(hour).padStart(2, "0")}:00</strong>
+        <strong>${timeLabel}</strong>
         <span>${busy ? `${timeOnly(busy.startTime)} - ${timeOnly(busy.endTime)} · ${escapeHtml(busy.title)}` : t("available")}</span>
       </div>
     `;
   }).join("");
+}
+
+function bookingOverlapsSlot(booking, slotStart, slotEnd) {
+  return new Date(booking.startTime) < slotEnd && new Date(booking.endTime) > slotStart;
 }
 
 function filters() {
