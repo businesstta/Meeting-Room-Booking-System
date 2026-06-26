@@ -17,7 +17,10 @@ async function loadEnv() {
       const separator = trimmed.indexOf("=");
       if (separator === -1) return;
       const key = trimmed.slice(0, separator).trim();
-      const value = trimmed.slice(separator + 1).trim();
+      let value = trimmed.slice(separator + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
       if (!process.env[key]) process.env[key] = value;
     });
   } catch {
@@ -187,6 +190,15 @@ function escapeEmailHtml(value) {
 
 function emailConfigured() {
   return Boolean(EMAIL_ENABLED && process.env.SMTP_HOST && MAIL_FROM);
+}
+
+function emailStatusMessage() {
+  if (!EMAIL_ENABLED) return "disabled; set EMAIL_ENABLED=true in .env to send email.";
+  const missing = [];
+  if (!process.env.SMTP_HOST) missing.push("SMTP_HOST");
+  if (!MAIL_FROM) missing.push("MAIL_FROM or SMTP_USER");
+  if (missing.length) return `disabled; missing ${missing.join(", ")}.`;
+  return `enabled via ${process.env.SMTP_HOST}:${SMTP_PORT}.`;
 }
 
 function getMailTransport() {
@@ -718,4 +730,5 @@ await migrateSecurity();
 
 app.listen(PORT, () => {
   console.log(`AtoZ Meeting Room Booking running at http://127.0.0.1:${PORT}`);
+  console.log(`Email notifications ${emailStatusMessage()}`);
 });
