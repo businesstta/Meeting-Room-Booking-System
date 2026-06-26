@@ -1554,6 +1554,39 @@ body[data-theme="dark"] .alert-panel.success h2 {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 16px;
+  min-height: 0;
+}
+
+.display-card {
+  display: flex;
+  flex-direction: column;
+  max-height: min(48vh, 560px);
+  min-height: 300px;
+  overflow: hidden;
+}
+
+.display-card .section-title {
+  flex: 0 0 auto;
+}
+
+.display-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
+.display-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.display-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.42);
+  border-radius: 999px;
+}
+
+.display-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .display-booking,
@@ -1697,6 +1730,11 @@ body[data-theme="dark"] .alert-panel.success h2 {
 
   .display-page {
     padding: 16px;
+  }
+
+  .display-card {
+    max-height: 52vh;
+    min-height: 260px;
   }
 
   .display-header,

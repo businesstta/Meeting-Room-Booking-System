@@ -1309,13 +1309,17 @@ function roomDisplayScreen() {
           <p>${roomPanelStatusLine(active, nextBooking, bookings.length)}</p>
         </div>
         <div class="display-grid">
-          <section class="card">
+          <section class="card display-card">
             <div class="section-title"><h2>${t("todayBookings")}</h2></div>
-            ${bookings.length ? bookings.map((booking) => roomPanelBooking(booking, data)).join("") : `<div class="empty">${t("noMeetingsToday")}</div>`}
+            <div class="display-scroll">
+              ${bookings.length ? bookings.map((booking) => roomPanelBooking(booking, data)).join("") : `<div class="empty">${t("noMeetingsToday")}</div>`}
+            </div>
           </section>
-          <section class="card">
+          <section class="card display-card">
             <div class="section-title"><h2>${t("dayTimeline")}</h2></div>
-            <div class="display-timeline">${roomPanelTimeline(bookings)}</div>
+            <div class="display-scroll">
+              <div class="display-timeline">${roomPanelTimeline(bookings)}</div>
+            </div>
           </section>
         </div>
       </section>
