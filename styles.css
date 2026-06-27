@@ -905,6 +905,11 @@ th {
   display: grid;
   gap: 8px;
   margin: 14px 0;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .department-user {
@@ -1872,6 +1877,10 @@ body[data-theme="dark"] .alert-panel.success h2 {
 
   .department-user {
     grid-template-columns: 1fr;
+  }
+
+  .department-users {
+    max-height: 230px;
   }
 
   .calendar-weekdays,
