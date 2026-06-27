@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "45";
+const APP_VERSION = "46";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -867,7 +867,7 @@ const views = {
           <h2>${t("userManagement")}</h2>
           <span class="status">${t("departmentBased")}</span>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap desktop-record-table">
           <table>
             <thead><tr><th>${t("name")}</th><th>${t("email")}</th><th>${t("role")}</th><th>${t("department")}</th><th>${t("status")}</th><th></th></tr></thead>
             <tbody>
@@ -888,6 +888,9 @@ const views = {
               `).join("")}
             </tbody>
           </table>
+        </div>
+        <div class="mobile-record-list">
+          ${state.data.users.map((user) => userRecordCard(user)).join("")}
         </div>
       </section>
     `;
@@ -1530,7 +1533,7 @@ function sortBookings(bookings) {
 function bookingTable(bookings) {
   if (!bookings.length) return `<div class="empty">${t("noBookings")}</div>`;
   return `
-    <div class="table-wrap">
+    <div class="table-wrap desktop-record-table">
       <table>
         <thead>
           <tr><th>${t("meeting")}</th><th>${t("room")}</th><th>${t("department")}</th><th>${t("time")}</th><th>${t("totalHours")}</th><th>${t("people")}</th><th>${t("status")}</th><th></th></tr>
@@ -1560,6 +1563,82 @@ function bookingTable(bookings) {
         </tbody>
       </table>
     </div>
+    <div class="mobile-record-list">
+      ${bookings.map((booking) => bookingRecordCard(booking)).join("")}
+    </div>
+  `;
+}
+
+function userRecordCard(user) {
+  const department = byId(state.data.departments, user.departmentId);
+  return `
+    <article class="mobile-record-card">
+      <div class="mobile-record-header">
+        <div>
+          <h3>${escapeHtml(user.name)}</h3>
+          <span class="record-subtitle">${escapeHtml(user.email)}</span>
+        </div>
+        <span class="status">${user.isActive ? "Active" : "Inactive"}</span>
+      </div>
+      <div class="mobile-record-grid">
+        <div>
+          <span>${t("role")}</span>
+          <strong>${escapeHtml(user.role)}</strong>
+        </div>
+        <div>
+          <span>${t("department")}</span>
+          <strong>${escapeHtml(department?.name || "-")}</strong>
+        </div>
+      </div>
+      <div class="mobile-record-actions">
+        <button class="btn ghost" data-edit="user" data-id="${user.id}">${t("edit")}</button>
+        <button class="btn ghost" data-delete-user="${user.id}">${t("delete")}</button>
+      </div>
+    </article>
+  `;
+}
+
+function bookingRecordCard(booking) {
+  const room = byId(state.data.rooms, booking.roomId);
+  const department = byId(state.data.departments, booking.departmentId);
+  const requester = byId(state.data.users, booking.requesterId);
+  return `
+    <article class="mobile-record-card">
+      <div class="mobile-record-header">
+        <div>
+          <h3>${escapeHtml(booking.title)}</h3>
+          <span class="record-subtitle">${escapeHtml(requester?.name || "Unknown")}</span>
+        </div>
+        <span class="status ${booking.status}">${escapeHtml(booking.status)}</span>
+      </div>
+      <div class="mobile-record-grid booking-record-grid">
+        <div>
+          <span>${t("room")}</span>
+          <strong>${escapeHtml(room?.name || "-")}</strong>
+        </div>
+        <div>
+          <span>${t("department")}</span>
+          <strong>${escapeHtml(department?.name || "-")}</strong>
+        </div>
+        <div class="wide">
+          <span>${t("time")}</span>
+          <strong>${fmtDateTime(booking.startTime)} - ${fmtDateTime(booking.endTime)}</strong>
+        </div>
+        <div>
+          <span>${t("totalHours")}</span>
+          <strong>${bookingHours(booking)}</strong>
+        </div>
+        <div>
+          <span>${t("people")}</span>
+          <strong>${booking.attendees}</strong>
+        </div>
+      </div>
+      ${canCancelBooking(booking) ? `
+        <div class="mobile-record-actions single">
+          <button class="btn ghost" data-cancel="${booking.id}">Cancel</button>
+        </div>
+      ` : ""}
+    </article>
   `;
 }
 
