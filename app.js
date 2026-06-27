@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "40";
+const APP_VERSION = "42";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -639,13 +639,15 @@ function render() {
   }
   const initial = state.currentUser.name.slice(0, 1).toUpperCase();
   const notificationCount = unreadNotifications().length;
+  const usesDrawerNavigation = window.matchMedia("(max-width: 760px)").matches;
+  const collapseLabel = usesDrawerNavigation ? t("close") : state.navCollapsed ? t("expandNav") : t("collapseNav");
   app.innerHTML = `
     <div class="shell ${state.navOpen ? "nav-open" : ""} ${state.navCollapsed ? "nav-collapsed" : ""}">
       <aside class="sidebar">
         ${brandMarkup()}
-        <button class="nav-collapse" data-action="collapse-nav" title="${state.navCollapsed ? t("expandNav") : t("collapseNav")}">
-          ${icon(state.navCollapsed ? "expand" : "collapse")}
-          <span>${state.navCollapsed ? t("expandNav") : t("collapseNav")}</span>
+        <button class="nav-collapse" data-action="collapse-nav" title="${collapseLabel}">
+          ${icon(usesDrawerNavigation || !state.navCollapsed ? "collapse" : "expand")}
+          <span>${collapseLabel}</span>
         </button>
         <nav class="nav">
           ${mainNavItems.filter((item) => canShowNavItem(item)).map((item) => navButton(item, notificationCount)).join("")}
@@ -1954,6 +1956,11 @@ function bindEvents() {
 
   document.querySelectorAll("[data-action='collapse-nav']").forEach((button) => {
     button.addEventListener("click", () => {
+      if (window.matchMedia("(max-width: 760px)").matches) {
+        state.navOpen = false;
+        render();
+        return;
+      }
       state.navCollapsed = !state.navCollapsed;
       localStorage.setItem("roombook-nav-collapsed", String(state.navCollapsed));
       render();

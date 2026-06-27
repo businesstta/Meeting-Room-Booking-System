@@ -1911,7 +1911,7 @@ body[data-theme="dark"] .alert-panel.success h2 {
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 760px) {
   .shell,
   .shell.nav-collapsed {
     grid-template-columns: 1fr;
