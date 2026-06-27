@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "43";
+const APP_VERSION = "44";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -386,6 +386,7 @@ function icon(name) {
     eyeOff: `<path d="m3 3 18 18"/><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"/><path d="M9.9 4.2A10.9 10.9 0 0 1 12 4.0c6.5 0 10 8 10 8a18.5 18.5 0 0 1-3.1 4.2"/><path d="M6.6 6.6C3.8 8.5 2 12 2 12s3.5 8 10 8a10.8 10.8 0 0 0 5.4-1.5"/>`,
     collapse: `<path d="M15 18 9 12l6-6"/><path d="M20 4v16M4 4v16"/>`,
     expand: `<path d="m9 18 6-6-6-6"/><path d="M4 4v16M20 4v16"/>`,
+    menu: `<path d="M4 7h16M4 12h16M4 17h16"/>`,
     display: `<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>`
   };
   return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.dashboard}</svg>`;
@@ -757,10 +758,14 @@ function topbar() {
 
   return `
     <div class="topbar">
-      <div>
-        <button class="btn secondary mobile-menu" data-action="toggle-nav">=</button>
-        <h1>${title}</h1>
-        <p>${subtitle}</p>
+      <div class="topbar-copy">
+        <button class="mobile-menu" type="button" data-action="toggle-nav" aria-label="${t("expandNav")}" title="${t("expandNav")}">
+          ${icon("menu")}
+        </button>
+        <div class="topbar-heading">
+          <h1>${title}</h1>
+          <p>${subtitle}</p>
+        </div>
       </div>
       <div class="toolbar">${action}</div>
     </div>

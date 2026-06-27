@@ -510,6 +510,17 @@ button {
   margin-bottom: 24px;
 }
 
+.topbar-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.topbar-heading {
+  min-width: 0;
+}
+
 .topbar h1 {
   margin: 0;
   font-size: clamp(26px, 4vw, 44px);
@@ -604,6 +615,29 @@ button {
 
 .mobile-menu {
   display: none;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #050505;
+  border-radius: 13px;
+  background: #050505;
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+.mobile-menu:hover {
+  transform: translateY(-1px);
+  background: #202020;
+}
+
+:root[data-theme="dark"] .mobile-menu {
+  border-color: #60a5fa;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.3);
 }
 
 .grid {
@@ -1822,15 +1856,17 @@ body[data-theme="dark"] .alert-panel.success h2 {
 
   .mobile-menu {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 42px;
-    padding: 0;
   }
 
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    gap: 18px;
+  }
+
+  .topbar-copy {
+    width: 100%;
+    gap: 14px;
   }
 
   .grid.metrics,
