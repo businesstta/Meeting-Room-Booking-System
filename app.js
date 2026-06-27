@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "44";
+const APP_VERSION = "45";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -2129,16 +2129,10 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-action='logout']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      try {
-        await apiFetch("/api/logout", { method: "POST" });
-      } catch (error) {
-        // Clear local state even if the server already ended the session.
-      }
-      localStorage.removeItem("roombook-current-user");
-      state.currentUser = null;
-      state.navOpen = false;
-      render();
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      void logoutCurrentUser();
     });
   });
 
@@ -2607,16 +2601,6 @@ document.addEventListener("click", async (event) => {
     await refreshApp();
     return;
   }
-  if (event.target.matches("[data-action='logout']")) {
-    await apiFetch("/api/logout", { method: "POST" }).catch(() => {});
-    stopNotificationPolling();
-    localStorage.removeItem("roombook-current-user");
-    state.currentUser = null;
-    state.data = { departments: [], users: [], rooms: [], bookings: [] };
-    state.navOpen = false;
-    render();
-    return;
-  }
   if (!event.target.matches("[data-action='install']")) return;
   if (!installPrompt) return notify("PWA install is available after serving over localhost or HTTPS.");
   installPrompt.prompt();
@@ -2684,6 +2668,26 @@ function stopNotificationPolling() {
   if (!notificationTimer) return;
   window.clearInterval(notificationTimer);
   notificationTimer = null;
+}
+
+function logoutCurrentUser() {
+  const logoutRequest = fetch("/api/logout", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    keepalive: true
+  }).catch(() => null);
+
+  stopNotificationPolling();
+  localStorage.removeItem("roombook-current-user");
+  state.currentUser = null;
+  state.data = { departments: [], users: [], rooms: [], bookings: [], notifications: [], settings: { modulePermissions: {} } };
+  state.navOpen = false;
+  state.roomPanel.active = false;
+  state.roomPanel.login = false;
+  state.roomPanel.data = null;
+  render();
+  return logoutRequest;
 }
 
 function startUpdatePolling() {

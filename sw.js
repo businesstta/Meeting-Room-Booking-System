@@ -1,9 +1,9 @@
-const CACHE_NAME = "roombook-pwa-v44";
+const CACHE_NAME = "roombook-pwa-v45";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=44",
-  "./app.js?v=44",
+  "./styles.css?v=45",
+  "./app.js?v=45",
   "./version.json",
   "./assets/atoz-logo.jpeg",
   "./assets/login-bg-meeting-room.png",
