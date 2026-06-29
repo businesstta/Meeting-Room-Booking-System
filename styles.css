@@ -267,11 +267,12 @@ button {
 
 .nav .nav-group-label strong,
 .nav button strong,
-.nav-collapse span {
+.nav-collapse > span:last-child {
   display: flex;
   min-height: 100%;
   align-items: center;
   line-height: 1.25;
+  transform: translateY(1px);
 }
 
 .nav .nav-group-label:hover,
@@ -518,7 +519,7 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding-block: 0;
+  padding-block: 1px 0;
   line-height: 1.25;
 }
 
@@ -615,7 +616,7 @@ button {
   background: var(--ink);
   color: #fff;
   min-height: 42px;
-  padding: 0 14px;
+  padding: 1px 14px 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1342,7 +1343,7 @@ th {
   border: 0;
   border-radius: 10px;
   min-height: 36px;
-  padding: 0 12px;
+  padding: 1px 12px 0;
   background: transparent;
   color: var(--muted);
   font-weight: 800;
