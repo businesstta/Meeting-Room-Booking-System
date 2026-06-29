@@ -1314,11 +1314,15 @@ th {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+  height: calc(100dvh - 166px);
+  min-height: 0;
 }
 
 .calendar-shell,
 .day-panel {
+  min-height: 0;
+  height: 100%;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -1328,11 +1332,10 @@ th {
 
 .day-panel {
   padding: 18px;
-  overflow: visible;
-  position: sticky;
-  top: 24px;
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
+  overflow: hidden;
+  position: static;
+  display: flex;
+  flex-direction: column;
 }
 
 .calendar-toolbar {
@@ -1550,7 +1553,12 @@ th {
 
 .day-timeline {
   display: grid;
+  min-height: 0;
   gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .day-slot {
@@ -2021,6 +2029,10 @@ body[data-theme="dark"] .alert-panel.success h2 {
     width: 100%;
     justify-content: flex-start;
   }
+
+  .calendar-layout {
+    height: calc(100dvh - 224px);
+  }
 }
 
 @media (max-width: 760px) {
@@ -2081,6 +2093,19 @@ body[data-theme="dark"] .alert-panel.success h2 {
   .calendar-layout,
   .display-grid {
     grid-template-columns: 1fr;
+  }
+
+  .calendar-layout {
+    height: auto;
+  }
+
+  .calendar-shell,
+  .day-panel {
+    height: auto;
+  }
+
+  .day-panel {
+    max-height: 66dvh;
   }
 
   .shell.nav-collapsed {
