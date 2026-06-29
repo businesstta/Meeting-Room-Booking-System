@@ -266,8 +266,7 @@ button {
 }
 
 .nav .nav-group-label strong,
-.nav button strong,
-.nav-collapse > span:last-child {
+.nav button strong {
   display: flex;
   min-height: 100%;
   align-items: center;
@@ -449,7 +448,6 @@ button {
 }
 
 .nav-collapsed .nav button strong,
-.nav-collapsed .nav-collapse > span:last-child,
 .nav-collapsed .nav-group-label strong {
   display: none;
 }
@@ -2238,7 +2236,6 @@ body[data-theme="dark"] .alert-panel.success h2 {
   .shell.nav-collapsed .profile-card div,
   .shell.nav-collapsed .profile .btn span,
   .shell.nav-collapsed .nav button strong,
-  .shell.nav-collapsed .nav-collapse > span:last-child,
   .shell.nav-collapsed .nav-group-label strong {
     display: block;
   }
