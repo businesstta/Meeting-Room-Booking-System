@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "49";
+const APP_VERSION = "50";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -646,11 +646,12 @@ function render() {
   app.innerHTML = `
     <div class="shell ${state.navOpen ? "nav-open" : ""} ${state.navCollapsed ? "nav-collapsed" : ""}">
       <aside class="sidebar">
-        ${brandMarkup()}
-        <button class="nav-collapse" data-action="collapse-nav" data-nav-tooltip="${escapeHtml(collapseLabel)}" aria-label="${escapeHtml(collapseLabel)}">
-          <span class="nav-collapse-icon" aria-hidden="true">${icon(usesDrawerNavigation || !state.navCollapsed ? "collapse" : "expand")}</span>
-          <span>${collapseLabel}</span>
-        </button>
+        <div class="sidebar-head">
+          <button class="nav-collapse" data-action="collapse-nav" data-nav-tooltip="${escapeHtml(collapseLabel)}" aria-label="${escapeHtml(collapseLabel)}" title="${escapeHtml(collapseLabel)}">
+            <span class="nav-collapse-icon" aria-hidden="true">${icon("menu")}</span>
+          </button>
+          ${brandMarkup()}
+        </div>
         <nav class="nav">
           ${mainNavItems.filter((item) => canShowNavItem(item)).map((item) => navButton(item, notificationCount)).join("")}
           ${settingsSubmenu(notificationCount)}
