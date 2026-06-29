@@ -305,6 +305,39 @@ button {
   background: rgba(255, 255, 255, 0.12);
 }
 
+.nav-hover-tooltip {
+  position: fixed;
+  z-index: 80;
+  max-width: min(240px, calc(100vw - 24px));
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: #050505;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-4px);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease;
+}
+
+.nav-hover-tooltip.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+:root[data-theme="dark"] .nav-hover-tooltip {
+  border-color: #46607f;
+  background: #16263a;
+  color: #f8fafc;
+}
+
 .nav button {
   min-height: 44px;
   border: 1px solid transparent;
@@ -1927,6 +1960,10 @@ body[data-theme="dark"] .alert-panel.success h2 {
 }
 
 @media (max-width: 760px) {
+  .nav-hover-tooltip {
+    display: none;
+  }
+
   .login-page {
     justify-items: center;
     padding: 18px;

@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "46";
+const APP_VERSION = "47";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -572,10 +572,11 @@ function canShowNavItem(item) {
 }
 
 function navButton(item, notificationCount = 0) {
+  const label = t(item.labelKey);
   return `
-    <button class="${state.view === item.id ? "active" : ""}" data-view="${item.id}" title="${t(item.labelKey)}">
+    <button class="${state.view === item.id ? "active" : ""}" data-view="${item.id}" data-nav-tooltip="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">
       <span class="nav-icon">${icon(item.icon)}${item.id === "notifications" && notificationCount ? `<em>${notificationCount}</em>` : ""}</span>
-      <strong>${t(item.labelKey)}</strong>
+      <strong>${label}</strong>
     </button>
   `;
 }
@@ -587,7 +588,7 @@ function settingsSubmenu(notificationCount = 0) {
   const open = state.settingsOpen || active;
   return `
     <div class="nav-group ${active ? "active" : ""} ${open ? "open" : ""}">
-      <button class="nav-group-label" type="button" data-action="toggle-settings" title="${t("settings")}" aria-expanded="${open}">
+      <button class="nav-group-label" type="button" data-action="toggle-settings" data-nav-tooltip="${escapeHtml(t("settings"))}" aria-label="${escapeHtml(t("settings"))}" aria-expanded="${open}">
         <span class="nav-icon">${icon("settings")}</span>
         <strong>${t("settings")}</strong>
       </button>
@@ -646,7 +647,7 @@ function render() {
     <div class="shell ${state.navOpen ? "nav-open" : ""} ${state.navCollapsed ? "nav-collapsed" : ""}">
       <aside class="sidebar">
         ${brandMarkup()}
-        <button class="nav-collapse" data-action="collapse-nav" title="${collapseLabel}">
+        <button class="nav-collapse" data-action="collapse-nav" data-nav-tooltip="${escapeHtml(collapseLabel)}" aria-label="${escapeHtml(collapseLabel)}">
           ${icon(usesDrawerNavigation || !state.navCollapsed ? "collapse" : "expand")}
           <span>${collapseLabel}</span>
         </button>
@@ -683,6 +684,7 @@ function render() {
         ${views[state.view]()}
       </main>
     </div>
+    <div class="nav-hover-tooltip" id="nav-hover-tooltip" role="tooltip"></div>
     ${modal()}
     ${alertDialog()}
     <div class="toast" id="toast"></div>
@@ -1977,7 +1979,38 @@ function timeInput(label, name, value) {
   `;
 }
 
+function showNavTooltip(target) {
+  if (window.matchMedia("(max-width: 760px)").matches) return;
+  const shell = target.closest(".shell");
+  const tooltip = document.querySelector("#nav-hover-tooltip");
+  const label = target.dataset.navTooltip;
+  if (!shell?.classList.contains("nav-collapsed") || !tooltip || !label) return;
+
+  tooltip.textContent = label;
+  tooltip.classList.add("show");
+  const targetRect = target.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const top = Math.min(
+    window.innerHeight - tooltipRect.height - 8,
+    Math.max(8, targetRect.top + (targetRect.height - tooltipRect.height) / 2)
+  );
+  const left = Math.min(window.innerWidth - tooltipRect.width - 8, targetRect.right + 12);
+  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${left}px`;
+}
+
+function hideNavTooltip() {
+  document.querySelector("#nav-hover-tooltip")?.classList.remove("show");
+}
+
 function bindEvents() {
+  document.querySelectorAll("[data-nav-tooltip]").forEach((button) => {
+    button.addEventListener("mouseenter", () => showNavTooltip(button));
+    button.addEventListener("mouseleave", hideNavTooltip);
+    button.addEventListener("focus", () => showNavTooltip(button));
+    button.addEventListener("blur", hideNavTooltip);
+  });
+
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.view = button.dataset.view;
