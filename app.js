@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "47";
+const APP_VERSION = "48";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -648,7 +648,7 @@ function render() {
       <aside class="sidebar">
         ${brandMarkup()}
         <button class="nav-collapse" data-action="collapse-nav" data-nav-tooltip="${escapeHtml(collapseLabel)}" aria-label="${escapeHtml(collapseLabel)}">
-          ${icon(usesDrawerNavigation || !state.navCollapsed ? "collapse" : "expand")}
+          <span class="nav-collapse-icon" aria-hidden="true">${icon(usesDrawerNavigation || !state.navCollapsed ? "collapse" : "expand")}</span>
           <span>${collapseLabel}</span>
         </button>
         <nav class="nav">
@@ -1101,7 +1101,7 @@ function workWeekDates(dateKey) {
   const day = date.getDay();
   const monday = new Date(date);
   monday.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
-  return Array.from({ length: 5 }, (_, index) => {
+  return Array.from({ length: 6 }, (_, index) => {
     const current = new Date(monday);
     current.setDate(monday.getDate() + index);
     return toDateKey(current);
