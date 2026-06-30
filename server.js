@@ -35,7 +35,10 @@ const DATABASE_URL = process.env.DATABASE_URL || "postgres://postgres:postgres@l
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-this-secret-before-production";
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE ?? (process.env.NODE_ENV === "production")).toLowerCase() === "true";
 const SESSION_COOKIE = "atoz_session";
-const SESSION_HOURS = 8;
+const SESSION_TIMEOUT_MINUTES = Number(process.env.SESSION_TIMEOUT_MINUTES || 30);
+if (!Number.isInteger(SESSION_TIMEOUT_MINUTES) || SESSION_TIMEOUT_MINUTES < 5 || SESSION_TIMEOUT_MINUTES > 1440) {
+  throw new Error("SESSION_TIMEOUT_MINUTES must be a whole number between 5 and 1440.");
+}
 const PASSWORD_ITERATIONS = 600000;
 const MIN_PASSWORD_LENGTH = 12;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -164,7 +167,7 @@ function unpackSession(value) {
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? token : "";
 }
 
-function sessionCookie(value, maxAgeSeconds = SESSION_HOURS * 3600) {
+function sessionCookie(value, maxAgeSeconds = SESSION_TIMEOUT_MINUTES * 60) {
   const secure = COOKIE_SECURE ? "; Secure" : "";
   const expires = maxAgeSeconds <= 0 ? "; Expires=Thu, 01 Jan 1970 00:00:00 GMT" : "";
   return `${SESSION_COOKIE}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${expires}${secure}`;
@@ -517,7 +520,8 @@ app.get("/api/me", asyncRoute(async (req, res) => {
   if (!token) return res.json({ user: null });
   const tokenHash = crypto.createHash("sha256").update(token).digest("base64url");
   const result = await pool.query(
-    `SELECT users.id, users.name, users.username, users.email, users.role, users.department_id, users.is_active, users.created_at
+    `SELECT users.id, users.name, users.username, users.email, users.role, users.department_id, users.is_active, users.created_at,
+            sessions.expires_at
        FROM sessions
        JOIN users ON users.id = sessions.user_id
       WHERE sessions.token_hash = $1
@@ -526,7 +530,10 @@ app.get("/api/me", asyncRoute(async (req, res) => {
       LIMIT 1`,
     [tokenHash]
   );
-  res.json({ user: result.rows[0] ? userRow(result.rows[0]) : null });
+  res.json({
+    user: result.rows[0] ? userRow(result.rows[0]) : null,
+    sessionExpiresAt: result.rows[0]?.expires_at?.toISOString?.() || null
+  });
 }));
 
 app.post("/api/login", loginRateLimit, asyncRoute(async (req, res) => {
@@ -554,12 +561,12 @@ app.post("/api/login", loginRateLimit, asyncRoute(async (req, res) => {
   const token = crypto.randomBytes(32).toString("base64url");
   const tokenHash = crypto.createHash("sha256").update(token).digest("base64url");
   await pool.query("DELETE FROM sessions WHERE user_id = $1 OR expires_at < CURRENT_TIMESTAMP", [user.id]);
-  await pool.query(
-    "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, CURRENT_TIMESTAMP + ($3 || ' hours')::interval)",
-    [tokenHash, user.id, SESSION_HOURS]
+  const session = await pool.query(
+    "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, CURRENT_TIMESTAMP + ($3 || ' minutes')::interval) RETURNING expires_at",
+    [tokenHash, user.id, SESSION_TIMEOUT_MINUTES]
   );
   res.setHeader("Set-Cookie", sessionCookie(packSession(token)));
-  res.json({ user: userRow(user) });
+  res.json({ user: userRow(user), sessionExpiresAt: session.rows[0].expires_at.toISOString() });
 }));
 
 app.post("/api/logout", asyncRoute(async (req, res) => {

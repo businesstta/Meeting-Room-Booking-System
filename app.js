@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "57";
+const APP_VERSION = "58";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -277,6 +277,7 @@ const state = {
   modal: null,
   alert: null,
   currentUser: null,
+  sessionExpiresAt: null,
   bookingDraft: null,
   data: { departments: [], users: [], rooms: [], bookings: [], notifications: [], settings: { modulePermissions: {}, roles: ["administrator", "manager", "user"], coreRoles: ["administrator", "manager", "user"] } },
   filters: {
@@ -396,8 +397,7 @@ async function apiFetch(path, options = {}) {
     error.status = response.status;
     error.payload = payload;
     if (response.status === 401) {
-      state.currentUser = null;
-      localStorage.removeItem("roombook-current-user");
+      if (state.currentUser) expireSession();
     }
     throw error;
   }
@@ -2283,8 +2283,9 @@ async function handleForm(event) {
 
   if (type === "login") {
     let user;
+    let sessionExpiresAt;
     try {
-      ({ user } = await apiFetch("/api/login", {
+      ({ user, sessionExpiresAt } = await apiFetch("/api/login", {
         method: "POST",
         body: JSON.stringify({ login: values.login, password: values.password })
       }));
@@ -2297,6 +2298,7 @@ async function handleForm(event) {
       return render();
     }
     state.currentUser = user;
+    scheduleSessionTimeout(sessionExpiresAt);
     state.view = "dashboard";
     await loadData();
     startNotificationPolling();
@@ -2306,8 +2308,9 @@ async function handleForm(event) {
 
   if (type === "room-display-login") {
     let user;
+    let sessionExpiresAt;
     try {
-      ({ user } = await apiFetch("/api/login", {
+      ({ user, sessionExpiresAt } = await apiFetch("/api/login", {
         method: "POST",
         body: JSON.stringify({ login: values.login, password: values.password })
       }));
@@ -2326,6 +2329,7 @@ async function handleForm(event) {
       return render();
     }
     state.currentUser = user;
+    scheduleSessionTimeout(sessionExpiresAt);
     await loadData();
     startNotificationPolling();
     await loadRoomPanelData();
@@ -2665,6 +2669,7 @@ function deleteConfirmation(kind, storeName, id) {
 let installPrompt = null;
 let notificationTimer = null;
 let updateTimer = null;
+let sessionTimeoutTimer = null;
 let notifiedUpdateVersion = null;
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
@@ -2747,6 +2752,39 @@ function stopNotificationPolling() {
   notificationTimer = null;
 }
 
+function stopSessionTimeout() {
+  if (sessionTimeoutTimer) window.clearTimeout(sessionTimeoutTimer);
+  sessionTimeoutTimer = null;
+  state.sessionExpiresAt = null;
+}
+
+function scheduleSessionTimeout(expiresAt) {
+  stopSessionTimeout();
+  if (!state.currentUser || !expiresAt) return;
+  const delay = new Date(expiresAt).getTime() - Date.now();
+  state.sessionExpiresAt = expiresAt;
+  if (!Number.isFinite(delay) || delay <= 0) return expireSession();
+  sessionTimeoutTimer = window.setTimeout(expireSession, delay);
+}
+
+function expireSession() {
+  stopNotificationPolling();
+  stopSessionTimeout();
+  localStorage.removeItem("roombook-current-user");
+  state.currentUser = null;
+  state.data = { departments: [], users: [], rooms: [], bookings: [], notifications: [], settings: { modulePermissions: {} } };
+  state.navOpen = false;
+  state.roomPanel.active = false;
+  state.roomPanel.login = false;
+  state.roomPanel.data = null;
+  state.alert = {
+    title: "Session expired",
+    message: "Your session has expired. Please sign in again.",
+    tone: "danger"
+  };
+  render();
+}
+
 function logoutCurrentUser() {
   const logoutRequest = fetch("/api/logout", {
     method: "POST",
@@ -2756,6 +2794,7 @@ function logoutCurrentUser() {
   }).catch(() => null);
 
   stopNotificationPolling();
+  stopSessionTimeout();
   localStorage.removeItem("roombook-current-user");
   state.currentUser = null;
   state.data = { departments: [], users: [], rooms: [], bookings: [], notifications: [], settings: { modulePermissions: {} } };
@@ -2779,9 +2818,10 @@ async function init() {
   const launchParams = new URLSearchParams(window.location.search);
   const pathLaunch = window.location.pathname.replace(/\/+$/, "").endsWith("/room-display");
   const roomDisplayLaunch = pathLaunch || launchParams.get("roomDisplay") === "1" || launchParams.get("roomPanel") === "1";
-  const { user } = await apiFetch("/api/me");
+  const { user, sessionExpiresAt } = await apiFetch("/api/me");
   state.currentUser = user;
   if (state.currentUser) {
+    scheduleSessionTimeout(sessionExpiresAt);
     await loadData();
     startNotificationPolling();
     if (roomDisplayLaunch && state.currentUser.role === "administrator") {

@@ -103,6 +103,7 @@ Create `.env` from `.env.example`, then update the PostgreSQL connection and ses
 DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/meeting_room_booking
 PORT=5173
 SESSION_SECRET=replace-with-a-long-random-secret
+SESSION_TIMEOUT_MINUTES=30
 ```
 
 Start the web app and API:
@@ -135,7 +136,9 @@ curl http://127.0.0.1:5173/api/health
 
 PostgreSQL data is retained in the `postgres_data` Docker volume. Keep
 `COOKIE_SECURE=false` for direct HTTP access; change it to `true` when the app
-is served over HTTPS.
+is served over HTTPS. Sessions expire after 30 minutes by default and require
+the user to sign in again. Set `SESSION_TIMEOUT_MINUTES` to a whole number from
+5 through 1440 to change the timeout.
 
 ## Android Room Panel APK
 
