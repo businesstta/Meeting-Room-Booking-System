@@ -33,8 +33,13 @@ await loadEnv();
 const PORT = Number(process.env.PORT || 5173);
 const DATABASE_URL = process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/meeting_room_booking";
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-this-secret-before-production";
+const COOKIE_SECURE = String(process.env.COOKIE_SECURE ?? (process.env.NODE_ENV === "production")).toLowerCase() === "true";
 const SESSION_COOKIE = "atoz_session";
 const SESSION_HOURS = 8;
+const PASSWORD_ITERATIONS = 600000;
+const MIN_PASSWORD_LENGTH = 12;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 10;
 const EMAIL_ENABLED = String(process.env.EMAIL_ENABLED || "false").toLowerCase() === "true";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_SECURE = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
@@ -49,13 +54,18 @@ const { Pool } = pg;
 const pool = new Pool({ connectionString: DATABASE_URL });
 const app = express();
 let mailTransport = null;
+const loginFailures = new Map();
 
 app.disable("x-powered-by");
-app.use(express.json());
+app.use(express.json({ limit: "32kb", strict: true }));
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "same-origin");
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  if (COOKIE_SECURE) res.setHeader("Strict-Transport-Security", "max-age=31536000");
   next();
 });
 
@@ -68,7 +78,7 @@ function toIsoMinute(value) {
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("base64url");
-  const iterations = 210000;
+  const iterations = PASSWORD_ITERATIONS;
   const hash = crypto.pbkdf2Sync(String(password), salt, iterations, 32, "sha256").toString("base64url");
   return `pbkdf2$${iterations}$${salt}$${hash}`;
 }
@@ -84,8 +94,47 @@ function verifyPassword(password, stored) {
   const actualBuffer = Buffer.from(actual);
   return {
     ok: expectedBuffer.length === actualBuffer.length && crypto.timingSafeEqual(expectedBuffer, actualBuffer),
-    needsUpgrade: false
+    needsUpgrade: iterations < PASSWORD_ITERATIONS
   };
+}
+
+function passwordValidationMessage(password) {
+  if (String(password).length < MIN_PASSWORD_LENGTH) return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  if (String(password).length > 128) return "Password must be 128 characters or fewer.";
+  return "";
+}
+
+function loginRateKey(req) {
+  const remoteAddress = req.socket.remoteAddress || "unknown";
+  const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const trustedProxy = /^(::ffff:)?10\.|^(::ffff:)?192\.168\.|^(::ffff:)?172\.(1[6-9]|2\d|3[01])\./.test(remoteAddress);
+  return trustedProxy && forwarded ? forwarded : remoteAddress;
+}
+
+function loginRateLimit(req, res, next) {
+  const key = loginRateKey(req);
+  const now = Date.now();
+  let entry = loginFailures.get(key);
+  if (entry && entry.resetAt <= now) {
+    loginFailures.delete(key);
+    entry = null;
+  }
+  if (entry?.count >= LOGIN_MAX_FAILURES) {
+    res.setHeader("Retry-After", Math.ceil((entry.resetAt - now) / 1000));
+    return res.status(429).json({ message: "Too many login attempts. Please try again later." });
+  }
+  req.loginRateKey = key;
+  next();
+}
+
+function recordLoginFailure(req) {
+  const now = Date.now();
+  const entry = loginFailures.get(req.loginRateKey);
+  if (!entry || entry.resetAt <= now) {
+    loginFailures.set(req.loginRateKey, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+  } else {
+    entry.count += 1;
+  }
 }
 
 function parseCookies(header = "") {
@@ -116,7 +165,7 @@ function unpackSession(value) {
 }
 
 function sessionCookie(value, maxAgeSeconds = SESSION_HOURS * 3600) {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  const secure = COOKIE_SECURE ? "; Secure" : "";
   const expires = maxAgeSeconds <= 0 ? "; Expires=Thu, 01 Jan 1970 00:00:00 GMT" : "";
   return `${SESSION_COOKIE}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${expires}${secure}`;
 }
@@ -306,6 +355,27 @@ async function migrateSecurity() {
   );
   await pool.query("DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP");
 
+  const activeAdmins = await pool.query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'administrator' AND is_active = true");
+  if (activeAdmins.rows[0].count === 0) {
+    const bootstrapPassword = String(process.env.BOOTSTRAP_ADMIN_PASSWORD || "");
+    const passwordError = passwordValidationMessage(bootstrapPassword);
+    if (passwordError) throw new Error("No active administrator exists. Set a secure BOOTSTRAP_ADMIN_PASSWORD before starting the application.");
+    const department = await pool.query(
+      "INSERT INTO departments (name, code) VALUES ('Administration', 'ADM') ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id"
+    );
+    await pool.query(
+      `INSERT INTO users (name, username, email, password, role, department_id, is_active)
+       VALUES ($1, $2, $3, $4, 'administrator', $5, true)`,
+      [
+        process.env.BOOTSTRAP_ADMIN_NAME || "System Administrator",
+        process.env.BOOTSTRAP_ADMIN_USERNAME || "admin",
+        process.env.BOOTSTRAP_ADMIN_EMAIL || "admin@company.test",
+        hashPassword(bootstrapPassword),
+        department.rows[0].id
+      ]
+    );
+  }
+
   const users = await pool.query("SELECT id, password FROM users");
   for (const user of users.rows) {
     if (user.password?.startsWith("pbkdf2$")) continue;
@@ -394,11 +464,38 @@ function isAdminDepartment(department) {
 }
 
 async function canCancelBooking(req, booking) {
-  if (Number(booking.requester_id) === Number(req.user.id)) return true;
-  if (req.user.role === "administrator") return true;
-  if (req.user.role !== "manager") return false;
-  const department = await pool.query("SELECT * FROM departments WHERE id = $1", [req.user.departmentId]);
-  return isAdminDepartment(department.rows[0]);
+  return ["administrator", "manager"].includes(req.user.role);
+}
+
+function isPrivilegedRole(role) {
+  return ["administrator", "manager"].includes(String(role).toLowerCase());
+}
+
+async function knownRole(role) {
+  const result = await pool.query("SELECT custom_roles FROM app_settings WHERE id = 1");
+  const customRoles = Array.isArray(result.rows[0]?.custom_roles) ? result.rows[0].custom_roles : [];
+  return [...CORE_ROLES, ...customRoles].includes(String(role).trim().toLowerCase());
+}
+
+async function userMutationAllowed(req, res, target = null) {
+  const requestedRole = String(req.body.role || "").trim().toLowerCase();
+  if (!(await knownRole(requestedRole))) {
+    res.status(400).json({ message: "Invalid user role." });
+    return false;
+  }
+  if (req.user.role !== "administrator" && (isPrivilegedRole(requestedRole) || isPrivilegedRole(target?.role))) {
+    res.status(403).json({ message: "Only administrators can manage privileged accounts or roles." });
+    return false;
+  }
+  if (target?.role === "administrator" && target.is_active && (requestedRole !== "administrator" || req.body.isActive !== true)) {
+    const others = await pool.query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'administrator' AND is_active = true AND id <> $1", [target.id]);
+    if (others.rows[0].count === 0) {
+      res.status(409).json({ message: "The last active administrator cannot be disabled or demoted." });
+      return false;
+    }
+  }
+  req.body.role = requestedRole;
+  return true;
 }
 
 async function createNotification({ userId, type = "info", title, message, bookingId = null }) {
@@ -432,23 +529,7 @@ app.get("/api/me", asyncRoute(async (req, res) => {
   res.json({ user: result.rows[0] ? userRow(result.rows[0]) : null });
 }));
 
-app.get("/api/public/room-panel", asyncRoute(async (_req, res) => {
-  const [rooms, bookings, users, departments] = await Promise.all([
-    pool.query("SELECT * FROM rooms WHERE is_active = true ORDER BY name"),
-    pool.query("SELECT * FROM bookings WHERE status <> 'cancelled' AND start_time::date = CURRENT_DATE ORDER BY start_time, id"),
-    pool.query("SELECT id, name, email, role, department_id, is_active, created_at FROM users ORDER BY id"),
-    pool.query("SELECT * FROM departments ORDER BY id")
-  ]);
-  res.json({
-    rooms: rooms.rows.map(roomRow),
-    bookings: bookings.rows.map(bookingRow),
-    users: users.rows.map((row) => userRow({ ...row, username: "" })),
-    departments: departments.rows.map(departmentRow),
-    generatedAt: toIsoMinute(new Date())
-  });
-}));
-
-app.post("/api/login", asyncRoute(async (req, res) => {
+app.post("/api/login", loginRateLimit, asyncRoute(async (req, res) => {
   const login = String(req.body.login || "").trim().toLowerCase();
   const password = String(req.body.password || "");
   const result = await pool.query(
@@ -461,7 +542,11 @@ app.post("/api/login", asyncRoute(async (req, res) => {
   );
   const user = result.rows[0];
   const passwordResult = user ? verifyPassword(password, user.password) : { ok: false };
-  if (!user || !passwordResult.ok) return res.status(401).json({ message: "Username or password is incorrect." });
+  if (!user || !passwordResult.ok) {
+    recordLoginFailure(req);
+    return res.status(401).json({ message: "Username or password is incorrect." });
+  }
+  loginFailures.delete(req.loginRateKey);
   if (passwordResult.needsUpgrade) {
     await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hashPassword(password), user.id]);
   }
@@ -522,7 +607,8 @@ app.put("/api/settings", requireAdmin, asyncRoute(async (req, res) => {
 app.post("/api/me/password", asyncRoute(async (req, res) => {
   const oldPassword = String(req.body.oldPassword || "");
   const newPassword = String(req.body.newPassword || "");
-  if (newPassword.length < 6) return res.status(400).json({ message: "New password must be at least 6 characters." });
+  const passwordError = passwordValidationMessage(newPassword);
+  if (passwordError) return res.status(400).json({ message: passwordError });
   const result = await pool.query("SELECT id, password FROM users WHERE id = $1", [req.user.id]);
   const passwordResult = result.rows[0] ? verifyPassword(oldPassword, result.rows[0].password) : { ok: false };
   if (!passwordResult.ok) return res.status(400).json({ message: "Old password is incorrect." });
@@ -594,6 +680,9 @@ app.delete("/api/rooms/:id", requireManager, asyncRoute(async (req, res) => {
 }));
 
 app.post("/api/users", requireManager, asyncRoute(async (req, res) => {
+  const passwordError = passwordValidationMessage(req.body.password);
+  if (passwordError) return res.status(400).json({ message: passwordError });
+  if (!(await userMutationAllowed(req, res))) return;
   const result = await pool.query(
     `INSERT INTO users (name, username, email, password, role, department_id, is_active)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -604,6 +693,14 @@ app.post("/api/users", requireManager, asyncRoute(async (req, res) => {
 }));
 
 app.put("/api/users/:id", requireManager, asyncRoute(async (req, res) => {
+  const targetResult = await pool.query("SELECT id, role, is_active FROM users WHERE id = $1", [req.params.id]);
+  const target = targetResult.rows[0];
+  if (!target) return res.status(404).json({ message: "User not found." });
+  if (req.body.password) {
+    const passwordError = passwordValidationMessage(req.body.password);
+    if (passwordError) return res.status(400).json({ message: passwordError });
+  }
+  if (!(await userMutationAllowed(req, res, target))) return;
   const values = [req.body.name, req.body.username, req.body.email, req.body.role, req.body.departmentId, req.body.isActive === true, req.params.id];
   const passwordSql = req.body.password ? ", password = $8" : "";
   if (req.body.password) values.push(hashPassword(req.body.password));
@@ -618,6 +715,17 @@ app.put("/api/users/:id", requireManager, asyncRoute(async (req, res) => {
 }));
 
 app.delete("/api/users/:id", requireManager, asyncRoute(async (req, res) => {
+  const targetResult = await pool.query("SELECT id, role, is_active FROM users WHERE id = $1", [req.params.id]);
+  const target = targetResult.rows[0];
+  if (!target) return res.status(404).json({ message: "User not found." });
+  if (Number(target.id) === Number(req.user.id)) return res.status(409).json({ message: "You cannot delete your own account." });
+  if (req.user.role !== "administrator" && isPrivilegedRole(target.role)) {
+    return res.status(403).json({ message: "Only administrators can delete privileged accounts." });
+  }
+  if (target.role === "administrator" && target.is_active) {
+    const others = await pool.query("SELECT COUNT(*)::int AS count FROM users WHERE role = 'administrator' AND is_active = true AND id <> $1", [target.id]);
+    if (others.rows[0].count === 0) return res.status(409).json({ message: "The last active administrator cannot be deleted." });
+  }
   await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
   res.json({ ok: true });
 }));
@@ -654,13 +762,15 @@ app.put("/api/bookings/:id", asyncRoute(async (req, res) => {
   const departmentId = canManage ? Number(req.body.departmentId) : req.user.departmentId;
   const conflict = await findConflict({ roomId: Number(req.body.roomId), startTime: req.body.startTime, endTime: req.body.endTime, excludeId: Number(req.params.id) });
   if (conflict) return res.status(409).json({ message: "Room already booked.", conflict });
+  const requestedStatus = canManage ? String(req.body.status || existing.rows[0].status) : existing.rows[0].status;
+  if (!["pending", "approved"].includes(requestedStatus)) return res.status(400).json({ message: "Invalid booking status." });
   const result = await pool.query(
     `UPDATE bookings
         SET title = $1, room_id = $2, requester_id = $3, department_id = $4, start_time = $5, end_time = $6,
             attendees = $7, status = $8, purpose = $9
       WHERE id = $10
       RETURNING *`,
-    [req.body.title, req.body.roomId, requesterId, departmentId, req.body.startTime, req.body.endTime, req.body.attendees, req.body.status || existing.rows[0].status, req.body.purpose || "", req.params.id]
+    [req.body.title, req.body.roomId, requesterId, departmentId, req.body.startTime, req.body.endTime, req.body.attendees, requestedStatus, req.body.purpose || "", req.params.id]
   );
   res.json(bookingRow(result.rows[0]));
 }));
@@ -722,30 +832,32 @@ app.post("/api/bookings/:id/cancel", asyncRoute(async (req, res) => {
 }));
 
 app.patch("/api/bookings/:id/status", requireManager, asyncRoute(async (req, res) => {
-  if (req.body.status === "cancelled") {
-    return res.status(400).json({ message: "Use the cancel endpoint with a reason." });
-  }
+  if (!["pending", "approved"].includes(req.body.status)) return res.status(400).json({ message: "Invalid booking status." });
   const result = await pool.query("UPDATE bookings SET status = $1 WHERE id = $2 RETURNING *", [req.body.status, req.params.id]);
   res.json(bookingRow(result.rows[0]));
 }));
 
-app.delete("/api/bookings/:id", asyncRoute(async (req, res) => {
-  const canManage = ["administrator", "manager"].includes(req.user.role);
+app.delete("/api/bookings/:id", requireManager, asyncRoute(async (req, res) => {
   const existing = await pool.query("SELECT requester_id FROM bookings WHERE id = $1", [req.params.id]);
   if (!existing.rows[0]) return res.status(404).json({ message: "Booking not found." });
-  if (!canManage && existing.rows[0].requester_id !== req.user.id) return res.status(403).json({ message: "You can only delete your own bookings." });
   await pool.query("DELETE FROM bookings WHERE id = $1", [req.params.id]);
   res.json({ ok: true });
 }));
 
-app.use(express.static(__dirname));
-app.get("*", async (_req, res) => {
+app.use("/assets", express.static(path.join(__dirname, "assets"), { dotfiles: "deny", fallthrough: false }));
+app.get(["/app.js", "/styles.css", "/sw.js", "/manifest.json", "/version.json"], (req, res) => {
+  res.sendFile(path.join(__dirname, req.path));
+});
+app.get(["/", "/index.html", "/room-display"], async (_req, res) => {
   res.type("html").send(await readFile(path.join(__dirname, "index.html"), "utf8"));
 });
+app.get("*", (_req, res) => res.status(404).type("text").send("Not found."));
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  res.status(500).json({ message: error.message || "Server error." });
+  if (error.code === "23505") return res.status(409).json({ message: "A record with one of those values already exists." });
+  if (error.code === "23503") return res.status(409).json({ message: "This record is still in use and cannot be deleted." });
+  res.status(500).json({ message: "Server error." });
 });
 
 await migrateSecurity();

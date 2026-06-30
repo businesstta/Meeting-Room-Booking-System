@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "54";
+const APP_VERSION = "57";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -272,53 +272,6 @@ const i18n = {
   }
 };
 
-const seed = {
-  departments: [
-    { id: 1, name: "Administration", code: "ADM" },
-    { id: 2, name: "Human Resources", code: "HR" },
-    { id: 3, name: "Finance", code: "FIN" },
-    { id: 4, name: "Engineering", code: "ENG" },
-    { id: 5, name: "Sales", code: "SAL" }
-  ],
-  users: [
-    { id: 1, name: "Admin Manager", username: "admin", email: "admin@company.test", password: "admin123", role: "administrator", departmentId: 1, isActive: true },
-    { id: 2, name: "Operations Manager", username: "manager", email: "manager@company.test", password: "manager123", role: "manager", departmentId: 1, isActive: true },
-    { id: 3, name: "Aye Aye", username: "aye", email: "aye@company.test", password: "user123", role: "user", departmentId: 2, isActive: true },
-    { id: 4, name: "Min Thu", username: "min", email: "min@company.test", password: "user123", role: "user", departmentId: 4, isActive: true }
-  ],
-  rooms: [
-    { id: 1, name: "Board Room", floor: "Level 8", capacity: 18, equipment: "TV, Video Conference, Whiteboard", isActive: true },
-    { id: 2, name: "Focus Room", floor: "Level 6", capacity: 6, equipment: "Whiteboard, Speaker", isActive: true },
-    { id: 3, name: "Training Hall", floor: "Level 4", capacity: 40, equipment: "Projector, Microphone, Stage", isActive: true }
-  ],
-  bookings: [
-    {
-      id: 1,
-      title: "Weekly Leadership Sync",
-      roomId: 1,
-      requesterId: 2,
-      departmentId: 1,
-      startTime: localDateAt("09:00"),
-      endTime: localDateAt("10:00"),
-      attendees: 10,
-      status: "approved",
-      purpose: "Weekly priorities and blockers."
-    },
-    {
-      id: 2,
-      title: "Hiring Interview",
-      roomId: 2,
-      requesterId: 3,
-      departmentId: 2,
-      startTime: localDateAt("13:30"),
-      endTime: localDateAt("14:30"),
-      attendees: 4,
-      status: "pending",
-      purpose: "Candidate panel interview."
-    }
-  ]
-};
-
 const state = {
   view: "dashboard",
   modal: null,
@@ -512,6 +465,15 @@ function canManage() {
   return ["administrator", "manager"].includes(state.currentUser?.role);
 }
 
+function canManageUser(user) {
+  if (state.currentUser?.role === "administrator") return true;
+  return state.currentUser?.role === "manager" && !["administrator", "manager"].includes(user?.role);
+}
+
+function canDeleteUser(user) {
+  return canManageUser(user) && Number(user?.id) !== Number(state.currentUser?.id);
+}
+
 function isAdminDepartmentUser() {
   const department = byId(state.data.departments, state.currentUser?.departmentId);
   return department?.code === "ADM" || /admin/i.test(department?.name || "");
@@ -519,14 +481,13 @@ function isAdminDepartmentUser() {
 
 function canCancelBooking(booking) {
   if (!booking || booking.status === "cancelled") return false;
-  if (Number(booking.requesterId) === Number(state.currentUser?.id)) return true;
-  if (state.currentUser?.role === "administrator") return true;
-  return state.currentUser?.role === "manager" && isAdminDepartmentUser();
+  return ["administrator", "manager"].includes(state.currentUser?.role);
 }
 
 function availableRoles() {
   const roles = state.data.settings?.roles;
-  return Array.isArray(roles) && roles.length ? roles : ["administrator", "manager", "user"];
+  const available = Array.isArray(roles) && roles.length ? roles : ["administrator", "manager", "user"];
+  return state.currentUser?.role === "administrator" ? available : available.filter((role) => !["administrator", "manager"].includes(role));
 }
 
 function coreRoles() {
@@ -883,8 +844,8 @@ const views = {
                   <td>${user.isActive ? "Active" : "Inactive"}</td>
                   <td>
                     <div class="actions">
-                      <button class="btn ghost" data-edit="user" data-id="${user.id}">${t("edit")}</button>
-                      <button class="btn ghost" data-delete-user="${user.id}">${t("delete")}</button>
+                      ${canManageUser(user) ? `<button class="btn ghost" data-edit="user" data-id="${user.id}">${t("edit")}</button>` : ""}
+                      ${canDeleteUser(user) ? `<button class="btn ghost" data-delete-user="${user.id}">${t("delete")}</button>` : ""}
                     </div>
                   </td>
                 </tr>
@@ -919,8 +880,8 @@ const views = {
                       <span>${escapeHtml(user.email)} - ${escapeHtml(user.role)}</span>
                     </div>
                     <div class="department-user-actions">
-                      <button class="btn ghost compact" data-edit="user" data-id="${user.id}">${t("editUser")}</button>
-                      <button class="btn ghost compact" data-delete-user="${user.id}">${t("deleteUser")}</button>
+                      ${canManageUser(user) ? `<button class="btn ghost compact" data-edit="user" data-id="${user.id}">${t("editUser")}</button>` : ""}
+                      ${canDeleteUser(user) ? `<button class="btn ghost compact" data-delete-user="${user.id}">${t("deleteUser")}</button>` : ""}
                     </div>
                   </div>
                 `).join("") : `<div class="department-user empty-row">${t("noUsersYet")}</div>`}
@@ -1594,8 +1555,8 @@ function userRecordCard(user) {
         </div>
       </div>
       <div class="mobile-record-actions">
-        <button class="btn ghost" data-edit="user" data-id="${user.id}">${t("edit")}</button>
-        <button class="btn ghost" data-delete-user="${user.id}">${t("delete")}</button>
+        ${canManageUser(user) ? `<button class="btn ghost" data-edit="user" data-id="${user.id}">${t("edit")}</button>` : ""}
+        ${canDeleteUser(user) ? `<button class="btn ghost" data-delete-user="${user.id}">${t("delete")}</button>` : ""}
       </div>
     </article>
   `;
@@ -1867,7 +1828,7 @@ function userForm() {
         ${input("Name", "name", "text", user?.name || "New User")}
         ${input("Username", "username", "text", user?.username || "newuser")}
         ${input("Email", "email", "email", user?.email || "user@company.test")}
-        ${input("Password", "password", "password", user ? "" : "user123", user ? false : true)}
+        ${input("Password", "password", "password", "", user ? false : true)}
         <div class="field">
           <label>Role</label>
           <select name="role">
@@ -2704,6 +2665,7 @@ function deleteConfirmation(kind, storeName, id) {
 let installPrompt = null;
 let notificationTimer = null;
 let updateTimer = null;
+let notifiedUpdateVersion = null;
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   installPrompt = event;
@@ -2734,7 +2696,9 @@ async function checkForAppUpdate() {
     const response = await fetch(`/version.json?ts=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
-    if (payload.version && String(payload.version) !== APP_VERSION && !state.alert?.updateAvailable) {
+    const availableVersion = String(payload.version || "");
+    if (availableVersion && availableVersion !== APP_VERSION && availableVersion !== notifiedUpdateVersion) {
+      notifiedUpdateVersion = availableVersion;
       state.alert = {
         title: "Update available",
         message: "A new version is ready. Refresh to load the latest changes.",

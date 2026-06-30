@@ -90,14 +90,6 @@ INSERT INTO departments (id, name, code) VALUES
   (6, 'Information Technology', 'IT')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO users (id, name, username, email, password, role, department_id, is_active) VALUES
-  (1, 'Admin Manager', 'admin', 'admin@company.test', 'admin123', 'administrator', 1, TRUE),
-  (2, 'Operations Manager', 'manager', 'manager@company.test', 'manager123', 'manager', 1, TRUE),
-  (3, 'Aye Aye', 'aye', 'aye@company.test', 'user123', 'user', 2, TRUE),
-  (4, 'Min Thu', 'min', 'min@company.test', 'user123', 'user', 4, TRUE),
-  (5, 'IT Department', 'it', 'it@atoz.com.mm', 'user123', 'user', 6, TRUE)
-ON CONFLICT (id) DO NOTHING;
-
 INSERT INTO rooms (id, name, floor, capacity, equipment, is_active) VALUES
   (1, 'Board Room', 'Level 8', 18, 'TV, Video Conference, Whiteboard', TRUE),
   (2, 'Focus Room', 'Level 6', 6, 'Whiteboard, Speaker', TRUE),
@@ -105,12 +97,5 @@ INSERT INTO rooms (id, name, floor, capacity, equipment, is_active) VALUES
   (4, '4th Floor Meeting Room', 'Level 4', 15, 'TV, Whiteboard', TRUE)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO bookings (id, title, room_id, requester_id, department_id, start_time, end_time, attendees, status, purpose) VALUES
-  (1, 'Weekly Leadership Sync', 1, 2, 1, CURRENT_DATE + TIME '09:00', CURRENT_DATE + TIME '10:00', 10, 'approved', 'Weekly priorities and blockers.'),
-  (2, 'Hiring Interview', 2, 3, 2, CURRENT_DATE + TIME '13:30', CURRENT_DATE + TIME '14:30', 4, 'pending', 'Candidate panel interview.')
-ON CONFLICT (id) DO NOTHING;
-
 SELECT setval('departments_id_seq', (SELECT MAX(id) FROM departments));
-SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 SELECT setval('rooms_id_seq', (SELECT MAX(id) FROM rooms));
-SELECT setval('bookings_id_seq', (SELECT MAX(id) FROM bookings));

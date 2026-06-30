@@ -117,6 +117,26 @@ Open the app:
 http://localhost:5173
 ```
 
+## Docker Deployment
+
+Copy the Docker environment template and replace both secret values:
+
+```bash
+cp .env.docker.example .env
+docker compose up -d --build
+```
+
+Check container status and the application health endpoint:
+
+```bash
+docker compose ps
+curl http://127.0.0.1:5173/api/health
+```
+
+PostgreSQL data is retained in the `postgres_data` Docker volume. Keep
+`COOKIE_SECURE=false` for direct HTTP access; change it to `true` when the app
+is served over HTTPS.
+
 ## Android Room Panel APK
 
 The Android wrapper is prepared with Capacitor for tablets mounted outside meeting rooms.
@@ -190,18 +210,12 @@ Email is sent to the email address saved in each user account. Current email eve
 
 For security, do not commit `.env` to GitHub. Use environment variables or server-side secrets on production.
 
-## Default Users
+## Initial Administrator
 
-Seed data may include default accounts for initial testing. Change all default passwords before company production use.
-
-Common seed examples:
-
-- Administrator: `admin` / `admin123`
-- Manager: `manager` / `manager123`
-- Normal user: `aye` / `user123`
-- Normal user: `it` / `user123`
-
-The actual current credentials may differ if the database has already been edited through the app.
+Fresh Docker installations do not create accounts with predictable passwords.
+Set `BOOTSTRAP_ADMIN_PASSWORD` to a unique value of at least 12 characters in
+the server-side `.env` file before the first startup. The bootstrap values are
+used only when the database has no active administrator.
 
 ## Core Tables
 

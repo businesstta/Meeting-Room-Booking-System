@@ -1,0 +1,10 @@
+.git
+.gitignore
+.env
+Dockerfile
+compose.yaml
+README.md
+android
+mobile-www
+node_modules
+npm-debug.log*

@@ -1,9 +1,9 @@
-const CACHE_NAME = "roombook-pwa-v54";
+const CACHE_NAME = "roombook-pwa-v57";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=54",
-  "./app.js?v=54",
+  "./styles.css?v=57",
+  "./app.js?v=57",
   "./version.json",
   "./assets/atoz-logo.jpeg",
   "./assets/login-bg-meeting-room.png",
@@ -33,13 +33,16 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(event.request));
     return;
   }
+
+  // Prefer the server for the application shell so deployments are visible
+  // immediately. The cache remains an offline fallback.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((response) => {
+    fetch(event.request)
+      .then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         return response;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });

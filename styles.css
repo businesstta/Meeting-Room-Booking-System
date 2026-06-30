@@ -1563,7 +1563,7 @@ th {
 
 .day-slot {
   display: grid;
-  grid-template-columns: 62px 1fr;
+  grid-template-columns: 52px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   min-height: 42px;
@@ -1572,6 +1572,17 @@ th {
   border-radius: 14px;
   background: var(--field);
   cursor: default;
+}
+
+.day-slot > strong {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.day-slot > div {
+  min-width: 0;
 }
 
 .day-slot.free {
@@ -1595,6 +1606,7 @@ th {
 .day-slot span {
   display: block;
   color: var(--muted);
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -1606,8 +1618,10 @@ th {
   background: transparent;
   color: inherit;
   padding: 0;
+  font-size: 12px;
   text-align: left;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .booking-detail {
