@@ -39,7 +39,7 @@ if (SESSION_SECRET.length < 32 || SESSION_SECRET.includes("change-this-secret") 
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE ?? (process.env.NODE_ENV === "production")).toLowerCase() === "true";
 const SESSION_COOKIE = "atoz_session";
 const ALLOWED_ORIGINS = new Set(
-  String(process.env.CORS_ALLOWED_ORIGINS || "https://office.atoz.com.mm,https://localhost,capacitor://localhost")
+  String(process.env.CORS_ALLOWED_ORIGINS || "https://office.atoz.com.mm,https://localhost")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean)
