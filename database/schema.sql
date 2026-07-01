@@ -31,6 +31,7 @@ CREATE TABLE bookings (
   title TEXT NOT NULL,
   room_id INTEGER NOT NULL,
   requester_id INTEGER NOT NULL,
+  requester_name TEXT,
   department_id INTEGER NOT NULL,
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
@@ -53,12 +54,6 @@ INSERT INTO departments (id, name, code) VALUES
   (3, 'Finance', 'FIN'),
   (4, 'Engineering', 'ENG'),
   (5, 'Sales', 'SAL');
-
-INSERT INTO users (id, name, username, email, password, role, department_id) VALUES
-  (1, 'Admin Manager', 'admin', 'admin@company.test', 'admin123', 'administrator', 1),
-  (2, 'Operations Manager', 'manager', 'manager@company.test', 'manager123', 'manager', 1),
-  (3, 'Aye Aye', 'aye', 'aye@company.test', 'user123', 'user', 2),
-  (4, 'Min Thu', 'min', 'min@company.test', 'user123', 'user', 4);
 
 INSERT INTO rooms (id, name, floor, capacity, equipment) VALUES
   (1, 'Board Room', 'Level 8', 18, 'TV, Video Conference, Whiteboard'),

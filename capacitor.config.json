@@ -1,9 +1,9 @@
 {
   "appId": "com.atozgroup.roompanel",
-  "appName": "AtoZ Room Panel",
+  "appName": "AtoZ Meeting Room Booking",
   "webDir": "mobile-www",
   "server": {
-    "url": "http://192.168.11.29:5173/room-display",
-    "cleartext": true
+    "url": "https://office.atoz.com.mm/room-display",
+    "cleartext": false
   }
 }

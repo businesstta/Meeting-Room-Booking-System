@@ -147,7 +147,7 @@ The Android wrapper is prepared with Capacitor for tablets mounted outside meeti
 The wrapper opens Room Display mode directly:
 
 ```text
-http://192.168.11.29:5173/room-display
+https://office.atoz.com.mm/room-display
 ```
 
 Before building or installing the APK:

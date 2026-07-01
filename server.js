@@ -32,7 +32,10 @@ await loadEnv();
 
 const PORT = Number(process.env.PORT || 5173);
 const DATABASE_URL = process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/meeting_room_booking";
-const SESSION_SECRET = process.env.SESSION_SECRET || "change-this-secret-before-production";
+const SESSION_SECRET = String(process.env.SESSION_SECRET || "");
+if (SESSION_SECRET.length < 32 || SESSION_SECRET.includes("change-this-secret") || SESSION_SECRET.includes("replace-this")) {
+  throw new Error("SESSION_SECRET must be a unique secret of at least 32 characters.");
+}
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE ?? (process.env.NODE_ENV === "production")).toLowerCase() === "true";
 const SESSION_COOKIE = "atoz_session";
 const SESSION_TIMEOUT_MINUTES = Number(process.env.SESSION_TIMEOUT_MINUTES || 30);
@@ -48,8 +51,8 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_SECURE = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
 const MAIL_FROM = process.env.MAIL_FROM || process.env.SMTP_USER || "";
 const DEFAULT_MODULE_PERMISSIONS = {
-  administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "module-permissions", "role-setup", "change-password", "settings"],
-  manager: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "change-password", "settings"],
+  administrator: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "cancel-bookings", "module-permissions", "role-setup", "change-password", "settings"],
+  manager: ["dashboard", "bookings", "calendar", "notifications", "rooms", "users", "departments", "cancel-bookings", "change-password", "settings"],
   user: ["dashboard", "bookings", "calendar", "notifications", "change-password", "settings"]
 };
 const CORE_ROLES = ["administrator", "manager", "user"];
@@ -68,7 +71,7 @@ app.use((_req, res, next) => {
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
-  if (COOKIE_SECURE) res.setHeader("Strict-Transport-Security", "max-age=31536000");
+  if (COOKIE_SECURE) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   next();
 });
 
@@ -207,6 +210,7 @@ function bookingRow(row) {
     title: row.title,
     roomId: row.room_id,
     requesterId: row.requester_id,
+    requesterName: row.requester_name || "",
     departmentId: row.department_id,
     startTime: toIsoMinute(row.start_time),
     endTime: toIsoMinute(row.end_time),
@@ -320,6 +324,7 @@ async function migrateSecurity() {
   await pool.query("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_by INTEGER REFERENCES users(id) ON DELETE SET NULL");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT");
+  await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS requester_name TEXT");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -342,6 +347,20 @@ async function migrateSecurity() {
     )
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at)");
+  await pool.query(`
+    INSERT INTO notifications (user_id, type, title, message, booking_id)
+    SELECT b.requester_id,
+           'cancelled',
+           'Booking cancelled',
+           b.title || ' was cancelled by ' || COALESCE(actor.name, 'a user') || '. Reason: ' || COALESCE(NULLIF(b.cancel_reason, ''), 'Not provided'),
+           b.id
+      FROM bookings b
+      LEFT JOIN users actor ON actor.id = b.cancelled_by
+     WHERE b.status = 'cancelled'
+       AND NOT EXISTS (
+         SELECT 1 FROM notifications n WHERE n.booking_id = b.id AND n.type = 'cancelled'
+       )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       id INTEGER PRIMARY KEY DEFAULT 1,
@@ -467,7 +486,10 @@ function isAdminDepartment(department) {
 }
 
 async function canCancelBooking(req, booking) {
-  return ["administrator", "manager"].includes(req.user.role);
+  if (req.user.role === "administrator") return true;
+  const result = await pool.query("SELECT module_permissions FROM app_settings WHERE id = 1");
+  const permissions = result.rows[0]?.module_permissions?.[req.user.role];
+  return Array.isArray(permissions) && permissions.includes("cancel-bookings");
 }
 
 function isPrivilegedRole(role) {
@@ -760,6 +782,40 @@ app.post("/api/bookings", asyncRoute(async (req, res) => {
   res.status(201).json(booking);
 }));
 
+app.post("/api/bookings/instant", requireAdmin, asyncRoute(async (req, res) => {
+  const title = String(req.body.title || "").trim();
+  const requesterName = String(req.body.requesterName || "").trim();
+  const purpose = String(req.body.purpose || "").trim();
+  const roomId = Number(req.body.roomId);
+  const departmentId = Number(req.body.departmentId);
+  const attendees = Number(req.body.attendees);
+  const startTime = String(req.body.startTime || "");
+  const endTime = String(req.body.endTime || "");
+  if (!title || title.length > 160) return res.status(400).json({ message: "Meeting title is required and must be 160 characters or fewer." });
+  if (!requesterName || requesterName.length > 120) return res.status(400).json({ message: "Requester name is required and must be 120 characters or fewer." });
+  if (!Number.isInteger(attendees) || attendees < 1 || attendees > 10000) return res.status(400).json({ message: "Attendees must be a whole number between 1 and 10000." });
+  const localDateTimePattern = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/;
+  if (!localDateTimePattern.test(startTime) || !localDateTimePattern.test(endTime)) return res.status(400).json({ message: "Select valid From and To times." });
+  if (startTime.slice(0, 10) !== endTime.slice(0, 10)) return res.status(400).json({ message: "From and To must be on the same day." });
+  const durationMinutes = (new Date(endTime) - new Date(startTime)) / 60000;
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0 || durationMinutes > 480) return res.status(400).json({ message: "To must be after From and no more than 8 hours later." });
+  const [roomResult, departmentResult] = await Promise.all([
+    pool.query("SELECT id FROM rooms WHERE id = $1 AND is_active = true", [roomId]),
+    pool.query("SELECT id FROM departments WHERE id = $1", [departmentId])
+  ]);
+  if (!roomResult.rows[0]) return res.status(400).json({ message: "Select an active room." });
+  if (!departmentResult.rows[0]) return res.status(400).json({ message: "Select a valid department." });
+  const conflict = await findConflict({ roomId, startTime, endTime });
+  if (conflict) return res.status(409).json({ message: "Room already booked for this time slot.", conflict });
+  const result = await pool.query(
+    `INSERT INTO bookings (title, room_id, requester_id, requester_name, department_id, start_time, end_time, attendees, status, purpose)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'approved', $9)
+     RETURNING *`,
+    [title, roomId, req.user.id, requesterName, departmentId, startTime, endTime, attendees, purpose]
+  );
+  res.status(201).json(bookingRow(result.rows[0]));
+}));
+
 app.put("/api/bookings/:id", asyncRoute(async (req, res) => {
   const canManage = ["administrator", "manager"].includes(req.user.role);
   const existing = await pool.query("SELECT * FROM bookings WHERE id = $1", [req.params.id]);
@@ -811,22 +867,14 @@ app.post("/api/bookings/:id/cancel", asyncRoute(async (req, res) => {
       [reason, req.user.id, req.params.id]
     );
     const cancelled = bookingRow(result.rows[0]);
-    if (Number(cancelled.requesterId) !== Number(req.user.id)) {
-      const title = "Booking cancelled";
-      const message = `${cancelled.title} was cancelled by ${req.user.name}. Reason: ${reason}`;
-      await client.query(
-        `INSERT INTO notifications (user_id, type, title, message, booking_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          cancelled.requesterId,
-          "cancelled",
-          title,
-          message,
-          cancelled.id
-        ]
-      );
-      emailNotice = { userId: cancelled.requesterId, title, message };
-    }
+    const title = "Booking cancelled";
+    const message = `${cancelled.title} was cancelled by ${req.user.name}. Reason: ${reason}`;
+    await client.query(
+      `INSERT INTO notifications (user_id, type, title, message, booking_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [cancelled.requesterId, "cancelled", title, message, cancelled.id]
+    );
+    emailNotice = { userId: cancelled.requesterId, title, message };
     await client.query("COMMIT");
     if (emailNotice) queueMailToUser(emailNotice.userId, emailNotice.title, emailNotice.message);
     res.json(cancelled);

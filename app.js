@@ -1,5 +1,5 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "58";
+const APP_VERSION = "63";
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -134,7 +134,16 @@ const i18n = {
     cancelBookingMessage: "Are you sure you want to cancel this booking?",
     cancelReason: "Reason",
     confirmCancel: "Confirm cancel",
-    bookingCancelled: "Booking cancelled"
+    bookingCancelled: "Booking cancelled",
+    cancelBookingsPermission: "Can cancel bookings",
+    instantMeeting: "Book Now",
+    instantMeetingBooking: "Book Now",
+    meetingTitle: "Meeting title",
+    timeSlot: "Time slot",
+    from: "From",
+    to: "To",
+    requesterName: "Requester name",
+    bookInstantMeeting: "Book Now"
   },
   my: {
     dashboard: "ဒက်ရှ်ဘုတ်",
@@ -268,7 +277,16 @@ const i18n = {
     cancelBookingMessage: "ဤ booking ကို cancel လုပ်မှာ သေချာပါသလား?",
     cancelReason: "Reason",
     confirmCancel: "Confirm cancel",
-    bookingCancelled: "Booking cancelled"
+    bookingCancelled: "Booking cancelled",
+    cancelBookingsPermission: "Booking cancel လုပ်နိုင်သည်",
+    instantMeeting: "Book Now",
+    instantMeetingBooking: "Book Now",
+    meetingTitle: "အစည်းအဝေးခေါင်းစဉ်",
+    timeSlot: "အချိန်ကာလ",
+    from: "စချိန်",
+    to: "ပြီးချိန်",
+    requesterName: "တောင်းဆိုသူအမည်",
+    bookInstantMeeting: "Book Now"
   }
 };
 
@@ -298,7 +316,9 @@ const state = {
     active: false,
     login: false,
     roomId: localStorage.getItem("roombook-display-room") || "",
-    data: null
+    data: null,
+    instantOpen: false,
+    notice: null
   },
   language: localStorage.getItem("roombook-language") || "en",
   theme: localStorage.getItem("roombook-theme") || "light"
@@ -321,6 +341,10 @@ const settingsNavItems = [
 ];
 
 const navItems = [...mainNavItems, ...settingsNavItems];
+const permissionItems = [
+  ...navItems.map((item) => ({ id: item.id, labelKey: item.labelKey })),
+  { id: "cancel-bookings", labelKey: "cancelBookingsPermission", capability: true }
+];
 
 function t(key) {
   return i18n[state.language]?.[key] || i18n.en[key] || key;
@@ -481,7 +505,7 @@ function isAdminDepartmentUser() {
 
 function canCancelBooking(booking) {
   if (!booking || booking.status === "cancelled") return false;
-  return ["administrator", "manager"].includes(state.currentUser?.role);
+  return state.currentUser?.role === "administrator" || roleModulePermissions().includes("cancel-bookings");
 }
 
 function availableRoles() {
@@ -497,13 +521,13 @@ function coreRoles() {
 
 function defaultModulesForRole(role) {
   if (role === "administrator") {
-    return [...navItems.map((item) => item.id), "settings"];
+    return [...navItems.map((item) => item.id), "cancel-bookings", "settings"];
   }
   if (role === "manager") {
     return navItems
       .map((item) => item.id)
       .filter((id) => !["module-permissions", "role-setup"].includes(id))
-      .concat("settings");
+      .concat("cancel-bookings", "settings");
   }
   return ["dashboard", "bookings", "calendar", "notifications", "change-password", "settings"];
 }
@@ -677,11 +701,11 @@ function loginScreen() {
         <form data-form="login" class="login-form">
           <div class="field">
             <label>${t("usernameEmail")}</label>
-            <input name="login" type="text" value="admin" autocomplete="username" required>
+            <input name="login" type="text" value="" autocomplete="username" required>
           </div>
           <div class="field">
             <label>${t("password")}</label>
-            ${passwordControl("password", "admin123")}
+            ${passwordControl("password", "")}
           </div>
           <button class="btn full" type="submit">${t("login")}</button>
         </form>
@@ -898,7 +922,6 @@ const views = {
     `;
   },
   "module-permissions"() {
-    const modules = navItems.map((item) => item.id);
     const roles = availableRoles();
     return `
       <section>
@@ -911,9 +934,10 @@ const views = {
             <div class="permission-grid" style="--role-count:${roles.length}">
               <div></div>
               ${roles.map((role) => `<strong>${role}</strong>`).join("")}
-              ${modules.map((moduleId) => `
-                <strong>${t(navItems.find((item) => item.id === moduleId)?.labelKey || moduleId)}</strong>
+              ${permissionItems.map((permission) => `
+                <strong>${t(permission.labelKey || permission.id)}</strong>
                 ${roles.map((role) => {
+                  const moduleId = permission.id;
                   const requiredForAll = moduleId === "change-password";
                   const adminOnly = ["module-permissions", "role-setup"].includes(moduleId);
                   const checked = role === "administrator" || requiredForAll || roleModulePermissions(role).includes(moduleId);
@@ -1350,11 +1374,15 @@ function roomDisplayScreen() {
             <h1>${escapeHtml(room?.name || t("roomDisplay"))}</h1>
             <p>${escapeHtml(room?.floor || "")} · ${formatDateLabel(localDate())}</p>
           </div>
-          <div class="field">
-            <label>${t("selectRoom")}</label>
-            <select data-display-room>${data.rooms.map((item) => `<option value="${item.id}"${Number(item.id) === Number(room?.id) ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select>
+          <div class="display-room-actions">
+            <div class="field">
+              <label>${t("selectRoom")}</label>
+              <select data-display-room>${data.rooms.map((item) => `<option value="${item.id}"${Number(item.id) === Number(room?.id) ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select>
+            </div>
+            <button class="btn" type="button" data-action="toggle-instant-meeting">${t("instantMeeting")}</button>
           </div>
         </div>
+        ${state.roomPanel.notice ? `<div class="display-notice ${state.roomPanel.notice.tone || "success"}">${escapeHtml(state.roomPanel.notice.message)}</div>` : ""}
         <div class="display-status ${active ? "busy" : "free"}">
           <span>${t("now")}</span>
           <strong>${active ? t("busyNow") : t("freeNow")}</strong>
@@ -1375,8 +1403,94 @@ function roomDisplayScreen() {
           </section>
         </div>
       </section>
+      ${state.roomPanel.instantOpen ? instantMeetingForm(room, data) : ""}
     </main>
   `;
+}
+
+function instantMeetingForm(room, data) {
+  const times = instantMeetingDefaultTimes();
+  return `
+    <div class="modal open instant-meeting-modal" role="dialog" aria-modal="true" aria-labelledby="instant-meeting-title">
+      <div class="modal-panel card instant-meeting-panel">
+        <div class="section-title">
+          <h2 id="instant-meeting-title">${t("instantMeetingBooking")}</h2>
+          <button class="btn ghost" type="button" data-action="toggle-instant-meeting">${t("close")}</button>
+        </div>
+        <form data-form="instant-meeting">
+          <div class="form-grid instant-meeting-grid">
+            ${input(t("meetingTitle"), "title", "text", "")}
+            <div class="instant-time-range wide">
+              ${instantTimeControl("start", t("from"), times.start)}
+              ${instantTimeControl("end", t("to"), times.end)}
+            </div>
+            ${input(t("attendees"), "attendees", "number", "1")}
+            ${input(t("requesterName"), "requesterName", "text", "")}
+            <div class="field">
+              <label>${t("room")}</label>
+              <input type="hidden" name="roomId" value="${Number(room?.id || 0)}">
+              <input value="${escapeHtml(room?.name || "-")}" disabled>
+            </div>
+            <div class="field">
+              <label>${t("department")}</label>
+              <select name="departmentId" required>${optionList(data.departments, "")}</select>
+            </div>
+            <div class="field wide">
+              <label>${t("purpose")}</label>
+              <textarea name="purpose" placeholder="${t("purpose")}"></textarea>
+            </div>
+          </div>
+          <button class="btn" type="submit">${t("bookInstantMeeting")}</button>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function instantMeetingDefaultTimes() {
+  const start = new Date();
+  start.setSeconds(0, 0);
+  start.setMinutes(Math.ceil(start.getMinutes() / 5) * 5);
+  const end = new Date(start.getTime() + 30 * 60000);
+  return { start: time12Parts(start), end: time12Parts(end) };
+}
+
+function time12Parts(date) {
+  const hour24 = date.getHours();
+  return {
+    hour: hour24 % 12 || 12,
+    minute: date.getMinutes(),
+    period: hour24 >= 12 ? "PM" : "AM"
+  };
+}
+
+function instantTimeControl(prefix, label, selected) {
+  const hourOptions = Array.from({ length: 12 }, (_, index) => index + 1)
+    .map((hour) => `<option value="${hour}"${hour === selected.hour ? " selected" : ""}>${String(hour).padStart(2, "0")}</option>`)
+    .join("");
+  const minuteOptions = Array.from({ length: 12 }, (_, index) => index * 5)
+    .map((minute) => `<option value="${minute}"${minute === selected.minute ? " selected" : ""}>${String(minute).padStart(2, "0")}</option>`)
+    .join("");
+  return `
+    <div class="field">
+      <label>${label}</label>
+      <div class="instant-time-control">
+        <select name="${prefix}Hour" aria-label="${label} hour" required>${hourOptions}</select>
+        <span>:</span>
+        <select name="${prefix}Minute" aria-label="${label} minute" required>${minuteOptions}</select>
+        <select name="${prefix}Period" aria-label="${label} AM or PM" required>
+          <option value="AM"${selected.period === "AM" ? " selected" : ""}>AM</option>
+          <option value="PM"${selected.period === "PM" ? " selected" : ""}>PM</option>
+        </select>
+      </div>
+    </div>
+  `;
+}
+
+function instantLocalDateTime(hour, minute, period) {
+  const hour12 = Number(hour);
+  const hour24 = (hour12 % 12) + (period === "PM" ? 12 : 0);
+  return `${localDate()}T${String(hour24).padStart(2, "0")}:${String(Number(minute)).padStart(2, "0")}`;
 }
 
 function isRoomPanelBooking(booking, room) {
@@ -1408,7 +1522,7 @@ function roomPanelBooking(booking, data) {
     <div class="display-booking">
       <strong>${timeOnly(booking.startTime)} - ${timeOnly(booking.endTime)}</strong>
       <span>${escapeHtml(booking.title)}</span>
-      <small>${t("bookedBy")} ${escapeHtml(requester?.name || "-")} · ${escapeHtml(department?.name || "-")}</small>
+      <small>${t("bookedBy")} ${escapeHtml(booking.requesterName || requester?.name || "-")} · ${escapeHtml(department?.name || "-")}</small>
     </div>
   `;
 }
@@ -2194,6 +2308,14 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='toggle-instant-meeting']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.roomPanel.instantOpen = !state.roomPanel.instantOpen;
+      state.roomPanel.notice = null;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-pref]").forEach((button) => {
     button.addEventListener("click", () => {
       state[button.dataset.pref] = button.dataset.value;
@@ -2255,6 +2377,10 @@ function bindEvents() {
   document.querySelectorAll("form[data-form]").forEach((form) => {
     form.addEventListener("submit", (event) => {
       handleForm(event).catch((error) => {
+        if (form.dataset.form === "instant-meeting") {
+          state.roomPanel.notice = { message: error.payload?.message || error.message || "Please try again.", tone: "danger" };
+          return render();
+        }
         state.alert = { title: "Request failed", message: error.payload?.message || error.message || "Please try again.", tone: "danger" };
         render();
       });
@@ -2339,6 +2465,34 @@ async function handleForm(event) {
     return notify("Room display opened.");
   }
 
+  if (type === "instant-meeting") {
+    const startTime = instantLocalDateTime(values.startHour, values.startMinute, values.startPeriod);
+    const endTime = instantLocalDateTime(values.endHour, values.endMinute, values.endPeriod);
+    const timeError = bookingTimeError(startTime, endTime);
+    if (timeError) {
+      state.roomPanel.notice = { message: timeError, tone: "danger" };
+      return render();
+    }
+    const savedBooking = await apiFetch("/api/bookings/instant", {
+      method: "POST",
+      body: JSON.stringify({
+        title: values.title,
+        startTime,
+        endTime,
+        attendees: Number(values.attendees),
+        requesterName: values.requesterName,
+        roomId: Number(values.roomId),
+        departmentId: Number(values.departmentId),
+        purpose: values.purpose
+      })
+    });
+    await loadData();
+    await loadRoomPanelData();
+    state.roomPanel.instantOpen = false;
+    state.roomPanel.notice = { message: `${savedBooking.title} has been booked for ${timeOnly(savedBooking.startTime)} - ${timeOnly(savedBooking.endTime)}.`, tone: "success" };
+    return render();
+  }
+
   if (type === "booking") {
     state.bookingDraft = values;
     const timeError = bookingTimeError(values.startTime, values.endTime);
@@ -2407,10 +2561,10 @@ async function handleForm(event) {
   if (type === "settings") {
     const modulePermissions = {};
     availableRoles().forEach((role) => {
-      modulePermissions[role] = role === "administrator" ? [...navItems.map((item) => item.id), "settings"] : ["change-password", "settings"];
-      navItems.forEach((item) => {
-        if (values[`${role}:${item.id}`] === "on" && !modulePermissions[role].includes(item.id)) {
-          modulePermissions[role].push(item.id);
+      modulePermissions[role] = role === "administrator" ? [...navItems.map((item) => item.id), "cancel-bookings", "settings"] : ["change-password", "settings"];
+      permissionItems.forEach((permission) => {
+        if (values[`${role}:${permission.id}`] === "on" && !modulePermissions[role].includes(permission.id)) {
+          modulePermissions[role].push(permission.id);
         }
       });
       if (role !== "administrator") {

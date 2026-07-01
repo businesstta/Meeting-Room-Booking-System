@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   title TEXT NOT NULL,
   room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  requester_name TEXT,
   department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE RESTRICT,
   start_time TIMESTAMP NOT NULL,
   end_time TIMESTAMP NOT NULL,
@@ -78,7 +79,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at);
 
 INSERT INTO app_settings (id, module_permissions, custom_roles) VALUES
-  (1, '{"administrator":["dashboard","bookings","calendar","notifications","rooms","users","departments","module-permissions","role-setup","change-password","settings"],"manager":["dashboard","bookings","calendar","notifications","rooms","users","departments","change-password","settings"],"user":["dashboard","bookings","calendar","notifications","change-password","settings"]}'::jsonb, '[]'::jsonb)
+  (1, '{"administrator":["dashboard","bookings","calendar","notifications","rooms","users","departments","cancel-bookings","module-permissions","role-setup","change-password","settings"],"manager":["dashboard","bookings","calendar","notifications","rooms","users","departments","cancel-bookings","change-password","settings"],"user":["dashboard","bookings","calendar","notifications","change-password","settings"]}'::jsonb, '[]'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO departments (id, name, code) VALUES
