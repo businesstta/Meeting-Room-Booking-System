@@ -38,6 +38,12 @@ if (SESSION_SECRET.length < 32 || SESSION_SECRET.includes("change-this-secret") 
 }
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE ?? (process.env.NODE_ENV === "production")).toLowerCase() === "true";
 const SESSION_COOKIE = "atoz_session";
+const ALLOWED_ORIGINS = new Set(
+  String(process.env.CORS_ALLOWED_ORIGINS || "https://office.atoz.com.mm,https://localhost,capacitor://localhost")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+);
 const SESSION_TIMEOUT_MINUTES = Number(process.env.SESSION_TIMEOUT_MINUTES || 30);
 if (!Number.isInteger(SESSION_TIMEOUT_MINUTES) || SESSION_TIMEOUT_MINUTES < 5 || SESSION_TIMEOUT_MINUTES > 1440) {
   throw new Error("SESSION_TIMEOUT_MINUTES must be a whole number between 5 and 1440.");
@@ -63,6 +69,20 @@ let mailTransport = null;
 const loginFailures = new Map();
 
 app.disable("x-powered-by");
+app.use((req, res, next) => {
+  const origin = String(req.headers.origin || "");
+  if (origin) {
+    if (!ALLOWED_ORIGINS.has(origin)) return res.status(403).json({ message: "Origin is not allowed." });
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Max-Age", "600");
+    res.vary("Origin");
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 app.use(express.json({ limit: "32kb", strict: true }));
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -172,8 +192,9 @@ function unpackSession(value) {
 
 function sessionCookie(value, maxAgeSeconds = SESSION_TIMEOUT_MINUTES * 60) {
   const secure = COOKIE_SECURE ? "; Secure" : "";
+  const sameSite = COOKIE_SECURE ? "None" : "Lax";
   const expires = maxAgeSeconds <= 0 ? "; Expires=Thu, 01 Jan 1970 00:00:00 GMT" : "";
-  return `${SESSION_COOKIE}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${expires}${secure}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(value)}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${maxAgeSeconds}${expires}${secure}`;
 }
 
 function userRow(row) {

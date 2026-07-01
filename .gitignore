@@ -1,3 +1,8 @@
 node_modules/
 .env
 npm-debug.log*
+mobile-www/app.js
+mobile-www/styles.css
+mobile-www/manifest.json
+mobile-www/version.json
+mobile-www/assets/

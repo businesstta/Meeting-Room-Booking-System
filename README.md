@@ -111,6 +111,8 @@ DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/meeting_room_booki
 PORT=5173
 SESSION_SECRET=replace-with-a-long-random-secret
 SESSION_TIMEOUT_MINUTES=30
+COOKIE_SECURE=false
+CORS_ALLOWED_ORIGINS=http://localhost:5173,https://office.atoz.com.mm,https://localhost,capacitor://localhost
 ```
 
 Start the web app and API:
@@ -151,20 +153,23 @@ the user to sign in again. Set `SESSION_TIMEOUT_MINUTES` to a whole number from
 
 The Android wrapper is prepared with Capacitor for tablets mounted outside meeting rooms.
 Its installed name is `AtoZ Meeting Room Booking`, package ID is
-`com.atozgroup.roompanel`, and current Android version is `1.1` (code `2`).
+`com.atozgroup.roompanel`, and current Android version is `1.2` (code `3`).
 
-The wrapper opens Room Display mode directly:
+The production wrapper bundles the Room Display HTML, CSS, JavaScript, and
+images inside the application. It does not load a remote website into the
+Capacitor WebView. The bundled client sends credentialed API requests only to:
 
 ```text
-https://office.atoz.com.mm/room-display
+https://office.atoz.com.mm/api
 ```
 
 Before building or installing the APK:
 
 1. Make sure `https://office.atoz.com.mm` is reachable from the tablet.
-2. Confirm `server.url` in `capacitor.config.json` points to the HTTPS Room Display URL.
-3. Run `npm run cap:sync` whenever the Capacitor configuration or local wrapper assets change.
-4. Keep Android cleartext traffic disabled. Both Capacitor and Android network security configuration enforce HTTPS.
+2. Keep the `server` configuration absent from `capacitor.config.json`.
+3. Keep `allowNavigation` absent and Android cleartext traffic disabled.
+4. Keep the mobile API origin restricted in `mobile-www/index.html` and the backend `CORS_ALLOWED_ORIGINS` setting.
+5. Run `npm run cap:sync` whenever web or Capacitor files change. This command prepares locally bundled assets before synchronizing Android.
 
 Install Android build tools on the build PC:
 
@@ -191,7 +196,40 @@ The debug APK will be created at:
 android/app/build/outputs/apk/debug/AtoZ Meeting Room Booking.apk
 ```
 
-For production, build a signed release APK or AAB from Android Studio:
+The debug APK is for internal testing only. Production uses R8 code
+minification, resource shrinking, disabled backups, no custom JavaScript
+bridge, and a signed release AAB.
+
+Create an upload keystore once and keep it outside the repository:
+
+```powershell
+keytool -genkeypair -v -keystore C:\secure\atoz-release.jks -alias atoz-meeting-room -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Set signing values in the build environment. Do not commit the actual values:
+
+```powershell
+$env:ANDROID_KEYSTORE_FILE="C:\secure\atoz-release.jks"
+$env:ANDROID_KEYSTORE_PASSWORD="your-keystore-password"
+$env:ANDROID_KEY_ALIAS="atoz-meeting-room"
+$env:ANDROID_KEY_PASSWORD="your-key-password"
+```
+
+Build the signed release AAB:
+
+```powershell
+npm run cap:sync
+cd android
+.\gradlew.bat bundleRelease -PrequireReleaseSigning=true
+```
+
+The release bundle is created at:
+
+```text
+android/app/build/outputs/bundle/release/app-release.aab
+```
+
+Open Android Studio when release inspection or Play deployment is needed:
 
 ```powershell
 npm run android:open
@@ -261,6 +299,10 @@ used only when the database has no active administrator.
 - Set `BOOTSTRAP_ADMIN_PASSWORD` only through server-side deployment secrets
 - Keep `.env` outside Git commits
 - Use HTTPS in production
+- Keep Capacitor UI files bundled locally; do not add `server.url` or `allowNavigation`
+- Keep `CORS_ALLOWED_ORIGINS` restricted to the production web and Capacitor origins
+- Publish a signed release AAB, never the debug APK
+- Back up the Android upload keystore securely
 - Put Node.js behind Nginx or another reverse proxy
 - Use a production PostgreSQL backup plan
 - Restrict server firewall ports

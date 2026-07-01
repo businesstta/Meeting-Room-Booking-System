@@ -1,5 +1,7 @@
 const APP_NAME = "AtoZ Group Meeting Room Booking System";
-const APP_VERSION = "63";
+const APP_VERSION = "64";
+const IS_NATIVE_APP = document.querySelector('meta[name="app-platform"]')?.content === "capacitor";
+const API_ORIGIN = (document.querySelector('meta[name="api-origin"]')?.content || "").replace(/\/$/, "");
 const stores = ["departments", "users", "rooms", "bookings"];
 const i18n = {
   en: {
@@ -410,8 +412,8 @@ async function loadRoomPanelData() {
 }
 
 async function apiFetch(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: "same-origin",
+  const response = await fetch(`${API_ORIGIN}${path}`, {
+    credentials: IS_NATIVE_APP ? "include" : "same-origin",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options
   });
@@ -2851,6 +2853,7 @@ function notify(message) {
 }
 
 async function checkForAppUpdate() {
+  if (IS_NATIVE_APP) return;
   try {
     const response = await fetch(`/version.json?ts=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) return;
@@ -2872,6 +2875,7 @@ async function checkForAppUpdate() {
 }
 
 async function refreshApp() {
+  if (IS_NATIVE_APP) return window.location.reload();
   if ("serviceWorker" in navigator) {
     const registrations = await navigator.serviceWorker.getRegistrations();
     await Promise.all(registrations.map((registration) => registration.unregister()));
@@ -2940,9 +2944,9 @@ function expireSession() {
 }
 
 function logoutCurrentUser() {
-  const logoutRequest = fetch("/api/logout", {
+  const logoutRequest = fetch(`${API_ORIGIN}/api/logout`, {
     method: "POST",
-    credentials: "same-origin",
+    credentials: IS_NATIVE_APP ? "include" : "same-origin",
     headers: { "Content-Type": "application/json" },
     keepalive: true
   }).catch(() => null);
@@ -2971,7 +2975,7 @@ function startUpdatePolling() {
 async function init() {
   const launchParams = new URLSearchParams(window.location.search);
   const pathLaunch = window.location.pathname.replace(/\/+$/, "").endsWith("/room-display");
-  const roomDisplayLaunch = pathLaunch || launchParams.get("roomDisplay") === "1" || launchParams.get("roomPanel") === "1";
+  const roomDisplayLaunch = IS_NATIVE_APP || pathLaunch || launchParams.get("roomDisplay") === "1" || launchParams.get("roomPanel") === "1";
   const { user, sessionExpiresAt } = await apiFetch("/api/me");
   state.currentUser = user;
   if (state.currentUser) {
@@ -2988,8 +2992,8 @@ async function init() {
     state.roomPanel.active = false;
   }
   render();
-  startUpdatePolling();
-  if ("serviceWorker" in navigator) {
+  if (!IS_NATIVE_APP) startUpdatePolling();
+  if (!IS_NATIVE_APP && "serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 }
