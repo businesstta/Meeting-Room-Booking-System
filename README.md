@@ -1,4 +1,4 @@
-# AtoZ Group Meeting Room Booking System
+# Meeting Room Booking System
 
 Responsive meeting-room booking platform with a PWA, PostgreSQL-backed Express
 API, role and capability controls, notifications, tablet Room Display, and a
