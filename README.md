@@ -23,15 +23,19 @@ Company meeting room booking system with a responsive PWA interface, PostgreSQL 
 - Auto-approved bookings when the room is free
 - Administrator and manager users can view all bookings
 - Normal users can view only their own booking records
-- Admin Department manager can cancel bookings for urgent room priority
+- Configurable `Can cancel bookings` capability in Module Permissions
 - Required cancellation reason with confirmation popup
-- Cancellation notification sent to the original requester
+- Every cancellation creates an in-app notification for the original requester
 - Notification page with unread count, read status, and mark all as read
 - Opening one notification marks that notification as read and updates the unread badge
 - Faster notification refresh through lightweight polling
 - Room Display panel for tablets outside meeting rooms
 - Administrator-only access to Room Display login
 - Room Display shows busy/free state by room and day schedule
+- Room Display `Book Now` popup for immediate bookings
+- `Book Now` captures meeting title, From/To time in 12-hour AM/PM format, attendees, requester name, room, department, and purpose
+- From and To controls remain side-by-side on the Room Display layout
+- Instant bookings enforce room, department, time-range, attendee, and conflict validation on the API
 - Android Room Panel wrapper that opens Room Display mode directly
 - Departments, users, and rooms CRUD with delete confirmations
 - Department page can assign existing users instead of recreating users
@@ -48,14 +52,17 @@ Company meeting room booking system with a responsive PWA interface, PostgreSQL 
 | Role | Access |
 | --- | --- |
 | administrator | Full system access, module permissions, users, departments, rooms, bookings, calendar, notifications, room display |
-| manager | Can view all bookings, cancel bookings, manage normal workflow modules allowed by settings |
-| user | Can book rooms and view only their own bookings, calendar, dashboard, notifications, and change password |
+| manager | Can view all bookings and manage workflow modules and capabilities allowed by settings |
+| user | Can book rooms and view only their own bookings, calendar, dashboard, notifications, and change password; cancellation can be granted by permission |
 
 Module visibility can be changed by an administrator from:
 
 ```text
 Settings > Module Permissions
 ```
+
+The same grid includes the `Can cancel bookings` capability. The API enforces
+this permission; it is not only a menu or button visibility setting.
 
 Custom roles can be created by an administrator from:
 
@@ -134,15 +141,17 @@ docker compose ps
 curl http://127.0.0.1:5173/api/health
 ```
 
-PostgreSQL data is retained in the `postgres_data` Docker volume. Keep
-`COOKIE_SECURE=false` for direct HTTP access; change it to `true` when the app
-is served over HTTPS. Sessions expire after 30 minutes by default and require
+PostgreSQL data is retained in the `postgres_data` Docker volume. Production
+HTTPS deployments must use `COOKIE_SECURE=true`; this also enables the HSTS
+response header. Sessions expire after 30 minutes by default and require
 the user to sign in again. Set `SESSION_TIMEOUT_MINUTES` to a whole number from
 5 through 1440 to change the timeout.
 
 ## Android Room Panel APK
 
 The Android wrapper is prepared with Capacitor for tablets mounted outside meeting rooms.
+Its installed name is `AtoZ Meeting Room Booking`, package ID is
+`com.atozgroup.roompanel`, and current Android version is `1.1` (code `2`).
 
 The wrapper opens Room Display mode directly:
 
@@ -152,16 +161,15 @@ https://office.atoz.com.mm/room-display
 
 Before building or installing the APK:
 
-1. Keep the meeting room server running with `npm start`.
-2. Make sure the tablet and the server PC are on the same network.
-3. Allow Windows Firewall inbound access to port `5173`.
-4. If the server IP changes, update `server.url` in `capacitor.config.json`, then run `npm run cap:sync`.
-5. Android cleartext traffic is enabled for the local room-panel URL through `android/app/src/main/res/xml/network_security_config.xml`.
+1. Make sure `https://office.atoz.com.mm` is reachable from the tablet.
+2. Confirm `server.url` in `capacitor.config.json` points to the HTTPS Room Display URL.
+3. Run `npm run cap:sync` whenever the Capacitor configuration or local wrapper assets change.
+4. Keep Android cleartext traffic disabled. Both Capacitor and Android network security configuration enforce HTTPS.
 
 Install Android build tools on the build PC:
 
 ```powershell
-choco install temurin17 androidstudio -y
+choco install temurin21 androidstudio -y
 ```
 
 Then restart PowerShell and build the debug APK:
@@ -180,7 +188,7 @@ C:\Program Files\Android\Android Studio\jbr
 The debug APK will be created at:
 
 ```text
-android/app/build/outputs/apk/debug/app-debug.apk
+android/app/build/outputs/apk/debug/AtoZ Meeting Room Booking.apk
 ```
 
 For production, build a signed release APK or AAB from Android Studio:
@@ -243,12 +251,14 @@ used only when the database has no active administrator.
 - `PUT /api/settings`
 - `POST /api/me/password`
 - CRUD endpoints for departments, rooms, users, and bookings
-- `GET /api/public/room-panel`
+- `POST /api/bookings/:id/cancel`
+- `POST /api/bookings/instant` (administrator-authenticated Room Display booking)
 
 ## Production Notes
 
 - Set a strong unique `SESSION_SECRET`
-- Change all default account passwords
+- Never ship or seed predictable account passwords
+- Set `BOOTSTRAP_ADMIN_PASSWORD` only through server-side deployment secrets
 - Keep `.env` outside Git commits
 - Use HTTPS in production
 - Put Node.js behind Nginx or another reverse proxy
@@ -264,6 +274,7 @@ used only when the database has no active administrator.
 3. The system checks room availability and prevents time conflicts.
 4. If free, the booking is auto-approved.
 5. The requester receives in-app notification and optional email.
-6. Administrator or manager can cancel bookings when needed.
-7. Cancellation requires a reason and notifies the requester.
-8. Room Display panels can show room busy/free state outside meeting rooms.
+6. A role with `Can cancel bookings` can cancel a booking when needed.
+7. Cancellation requires a reason and always creates a requester notification.
+8. Room Display panels show room busy/free state and the daily schedule.
+9. An administrator can use the Room Display `Book Now` popup for an immediate conflict-checked booking.
